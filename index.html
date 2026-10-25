@@ -6136,7 +6136,7 @@ window.__vbOn=function(ev,d){
     if((la.getAttribute('data-live')==='1')!==live)la.setAttribute('data-live',live?'1':'0');
     syncRoom();
     var k=hasKey();if(k===lastKey)return;lastKey=k;AI.ok=null;
-    render Chrome();
+    renderChrome();
     if(R.tab==='home'||R.tab==='profile'||R.tab==='progress')renderView();
   },1000);
   setInterval(nPurge,60000);
