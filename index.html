@@ -647,6 +647,8 @@ html[data-vbt=light] .modal [style*="color:#cbd5e1"]{color:#475569!important}
 .nt-chk input{width:18px;height:18px;accent-color:var(--pr);cursor:pointer;flex:0 0 auto}
 .nt-brk{margin-top:26px}.nt-muted{color:#6b7399;font-style:italic}
 .nt-ap td:nth-child(4){word-break:break-word}
+.nt-chk small{display:block;font-weight:500;color:var(--mu);margin-top:3px;line-height:1.5;font-size:11px}
+.nt-ainote{font-size:11.5px;color:var(--mu);line-height:1.6;padding:2px 4px}
 </style>
 <script id="vb-patch-js">
 /* === VoiceBridge patch: izin mikrofon SEKALI saja + transkrip live auto-scroll ===
@@ -1442,13 +1444,20 @@ function processTTS(){
   var ended=false, guardT=null, startT=null;
   function fin(){
     if(ended) return; ended=true; clearTimeout(guardT); clearTimeout(startT);
+    /* PATCH index 28: guard timeout wajib benar-benar menghentikan media lama.
+       Tanpa ini, audio lama masih berjalan ketika item antrian berikutnya dimulai. */
+    if(onlineAudioEl){
+      try{ onlineAudioEl.pause(); onlineAudioEl.currentTime=0; onlineAudioEl.onended=null; onlineAudioEl.onerror=null; }catch(e){}
+      onlineAudioEl=null;
+    }
+    if(currentUtterance){ try{ window.speechSynthesis.cancel(); }catch(e){} }
     ttsBusy=false; currentUtterance=null;
     if(!ttsQueue.length) resumeEngineAfterTTS();
-    setTimeout(processTTS,120);
+    setTimeout(processTTS,180);
   }
   suspendEngineForTTS();
   /* Pengaman: onend sering tidak terpanggil di Chrome Android -> paksa lanjut agar antrian tidak macet */
-  guardT=setTimeout(fin, Math.min(30000, 5000+String(item.text).length*110));
+  guardT=setTimeout(fin, Math.min(120000, 12000+String(item.text).length*150));
   var langKey=String(item.lang||'').toLowerCase();
   var v=pickVoice(item.lang);
   var canLocal=!!(v&&('speechSynthesis' in window));
@@ -1982,7 +1991,7 @@ function openSettings(){
   '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)">'+
   '<div class="badge-soft" style="margin-bottom:8px">\uD83E\uDD16 Pelatih Bahasa Inggris (opsional)</div>'+
   'Menu <b>Belajar</b> sudah memakai <b>pelatih AI lokal</b> (tanpa API key &amp; tanpa internet). Jika Anda punya key Gemini, tempel di sini agar percakapan dibantu Google Gemini; bila gagal, pelatih lokal otomatis melanjutkan.<br>'+
-  '<span style="color:var(--muted);font-size:11px">Key gratis di <b>aistudio.google.com/apikey</b>. Permintaan dikirim langsung dari browser Anda ke Google. Notulen rapat <b>tidak</b> memakai key ini.</span><br>'+
+  '<span style="color:var(--muted);font-size:11px">Key gratis di <b>aistudio.google.com/apikey</b>. Permintaan dikirim langsung dari browser Anda ke Google. Notulen rapat hanya memakai key ini bila Anda mencentang <b>Gunakan Gemini AI</b> di menu Notulen (teks transkrip dikirim ke Google).</span><br>'+
   '<label class="fld" style="margin-top:8px">Gemini API Key</label><input class="txt" id="cfgGeminiKey" placeholder="AIza... / AQ...">'+
   '<label class="fld" style="margin-top:8px">Model (opsional)</label><input class="txt" id="cfgGeminiModel" placeholder="otomatis (gemini-2.5-flash / gemini-2.0-flash)">'+
   '</div>'+
@@ -2385,6 +2394,7 @@ var UI_EN={
  ntLocal:'Made on your device by the local AI engine. No API or internet is needed for the analysis.',ntNoTrans:'Automatic translation is not available now. Showing the base language.',
  ntEmpty:'No conversation yet. Start a session and speak first.',ntDone:'Minutes are ready.',ntCopied:'Minutes copied.',ntDl:'File downloaded.',ntOnlyRoom:'Minutes are only shown for the room you are in.',
  ntStats:'sentences',ntAttach:'Attach the original transcript below the minutes',ntPeople:'participants',
+ ntAI:'Use Gemini AI for deeper, more descriptive minutes',ntAIsub:'Optional. Sends the transcript text to Google Gemini using your API key. If it fails, the local engine is used automatically.',ntAINoKey:'Tip: add a Gemini API key in Settings to unlock more descriptive AI-written minutes (optional).',ntAIbusy:'Gemini AI is writing the minutes...',ntAIdone:'Minutes written by Gemini AI.',ntAIfail:'Gemini could not be used, so the local engine was used instead:',ntAIparse:'The AI answer was incomplete.',ntAIcut:'The transcript was very long, so only the first part was summarised.',ntAIfoot:'These minutes were written by Gemini AI from the transcript text, using your API key. Please review before sharing.',
  guide:'How to use this app',g1:'Open Meeting Room, pick a room and enter your name.',g2:'Open Translator, tap Start, then Unmute to speak.',g3:'Open Learn to practice English, then check Progress.',tourAgain:'Watch the tutorial',
  aTitleIn:'Welcome back',aSubIn:'Log in to see your score, AI tips and progress.',
  aTitleUp:'Create your account',aSubUp:'Your scores and AI tips are saved to your account.',
@@ -2477,6 +2487,7 @@ var UI_ID={
  ntLocal:'Dibuat di perangkat Anda oleh mesin AI lokal. Analisis tidak memerlukan API maupun internet.',ntNoTrans:'Terjemahan otomatis sedang tidak tersedia. Ditampilkan dalam bahasa dasar.',
  ntEmpty:'Belum ada percakapan. Mulai sesi dan bicara dulu.',ntDone:'Notulen siap.',ntCopied:'Notulen disalin.',ntDl:'File terunduh.',ntOnlyRoom:'Notulen hanya tampil untuk room yang sedang Anda masuki.',
  ntStats:'kalimat',ntAttach:'Lampirkan transkrip asli di bawah notulen',ntPeople:'peserta',
+ ntAI:'Gunakan Gemini AI untuk notulen lebih mendalam & deskriptif',ntAIsub:'Opsional. Teks transkrip dikirim ke Google Gemini memakai API key Anda. Jika gagal, mesin lokal otomatis dipakai.',ntAINoKey:'Tips: isi Gemini API Key di Pengaturan untuk notulen yang ditulis AI dan lebih deskriptif (opsional).',ntAIbusy:'Gemini AI sedang menulis notulen...',ntAIdone:'Notulen ditulis oleh Gemini AI.',ntAIfail:'Gemini tidak dapat dipakai, jadi mesin lokal yang digunakan:',ntAIparse:'Jawaban AI tidak lengkap.',ntAIcut:'Transkrip sangat panjang, hanya bagian awal yang diringkas.',ntAIfoot:'Notulen ini ditulis oleh Gemini AI dari teks transkrip memakai API key Anda. Mohon diperiksa kembali sebelum dibagikan.',
  guide:'Cara memakai aplikasi ini',g1:'Buka Room Meeting, pilih room, lalu isi nama Anda.',g2:'Buka Translator, tekan Start, lalu Unmute untuk bicara.',g3:'Buka Belajar untuk latihan Inggris, lalu cek Progress.',tourAgain:'Lihat tutorial',
  aTitleIn:'Selamat datang kembali',aSubIn:'Masuk untuk melihat skor, saran AI, dan perkembangan Anda.',
  aTitleUp:'Buat akun Anda',aSubUp:'Skor dan saran AI tersimpan di akun Anda.',
@@ -3285,7 +3296,7 @@ function splitSentences(t){
 function cleanSentence(s){
   s=String(s||'').replace(/\s+/g,' ').trim();
   for(var i=0;i<4;i++){var n=s.replace(FILL_START,'');if(n===s)break;s=n;}
-  s=s.replace(/\b(\w{2,})(\s+\1\b)+/gi,'$1').replace(/\s\d\s(?=[A-Za-z])/g,' ').replace(/\b(ya|kan|gitu|deh|sih|dong|lah)\s*([.?!]*)$/i,'$2').replace(/\s+([,.?!])/g,'$1').trim();
+  s=s.replace(/\b(\w{2,})(\s+\1\b)+/gi,function(m,w){return STOP[lc(w)]?w:m;}).replace(/\b(ya|kan|gitu|deh|sih|dong|lah)\s*([.?!]*)$/i,'$2').replace(/\s+([,.?!])/g,'$1').trim();
   return s;
 }
 /* kalimat panjang (ujaran lisan tanpa jeda) dipecah di batas klausa */
@@ -3313,62 +3324,127 @@ function lowerFirst(s){
   if(!w||PROPER[lc(w)]||/^[A-Z]{2,}/.test(s))return s;
   return /^[A-Z][a-z]/.test(s)?s.charAt(0).toLowerCase()+s.slice(1):s;
 }
-/* ---------------- penulisan ulang menjadi informasi (tanpa "saya/kita") ---------------- */
 var PRE_ID='oleh|bagi|dengan|kepada|untuk|dan|bahwa|yang|karena|jika|kalau|bila|ketika|saat|sebab|tapi|namun|sedangkan|maka|lalu|kemudian|bahkan|atau|serta|sambil|hingga|sampai|dari|di|ke|pada|dalam|tentang|akan|sudah|belum|telah|sedang|juga|masih|tidak|bisa|dapat|harus|perlu|mau|ingin|oh|eh';
-var MODAL_ID='akan|mau|bakal|coba|ingin|perlu|harus|sudah|belum|telah|sedang|juga|masih|dapat|bisa|pernah|tidak|tak|selalu|biasanya|sepakat|setuju|punya|memiliki|ada';
-function rewrite(clause,al,mode,name){
-  var s=String(clause||'').trim(),ref;
-  if(al==='id'){
-    ref=(mode==='attr')?'ia':'pembicara';
-    s=s.replace(new RegExp('^(saya|aku|gue|gua|kami|kita)\\s+(?=(?:'+MODAL_ID+'|me\\w{3,}|ber\\w{3,}|di\\w{3,})\\b)','i'),function(m){return mode==='attr'?(/^(kami|kita)/i.test(m)?'tim ':'ia '):(/^(kami|kita)/i.test(m)?'tim ':'pembicara ');});
-    s=s.replace(new RegExp('(\\b(?!(?:'+PRE_ID+')\\b)[a-z]{3,}) (?:saya|aku)\\b','gi'),'$1nya');
-    s=s.replace(/\b(saya|aku|gue|gua)\b/gi,ref).replace(/\b(kami|kita)\b/gi,'tim').replace(/\b(anda|kamu|kalian)\b/gi,'peserta');
-    s=s.replace(/\bmenurut (?:ia|pembicara)\b/gi,'menurut pembicara').replace(/\s{2,}/g,' ').trim();
-  }else{
-    ref=(mode==='attr')?'they':'the speaker';
-    s=s.replace(/^(?:I|We)\s+(?=(?:will|would|can|could|should|must|need|have|had|am|was|are|were|'ll|plan|want|think|believe|try|tried|found|see|saw)\b)/,function(m){return mode==='attr'?(/^We/.test(m)?'the team ':'they '):(/^We/.test(m)?'the team ':'the speaker ');});
-    s=s.replace(/\bI'm\b/gi,ref+' is').replace(/\bI'll\b/gi,ref+' will').replace(/\bI've\b/gi,ref+' has').replace(/\bI am\b/gi,ref+' is').replace(/\bI have\b/gi,ref+' has').replace(/\bI\b/g,ref)
-     .replace(/\bmy\b/gi,mode==='attr'?'their':'the speaker\'s').replace(/\bwe're\b/gi,'the team is').replace(/\bwe'll\b/gi,'the team will').replace(/\bwe\b/gi,'the team').replace(/\bour\b/gi,'the team\'s').replace(/\bus\b/gi,'the team').replace(/\byou\b/gi,'participants').replace(/\byour\b/gi,'participants\'');
-    var SV={need:'needs',want:'wants',have:'has',are:'is',were:'was','do':'does',"don't":"doesn't",review:'reviews',use:'uses',think:'thinks',believe:'believes',see:'sees',find:'finds',plan:'plans',try:'tries',agree:'agrees',know:'knows',check:'checks',send:'sends',expect:'expects',prefer:'prefers',require:'requires',work:'works',get:'gets',make:'makes',take:'takes',look:'looks',feel:'feels'};
-    s=s.replace(/\b(the team|the speaker) (need|want|have|are|were|do|don't|review|use|think|believe|see|find|plan|try|agree|know|check|send|expect|prefer|require|work|get|make|take|look|feel)\b/gi,function(m,a,v){return a+' '+SV[lc(v)];});
-    s=s.replace(/\s{2,}/g,' ').trim();
+/* ======================================================================
+   MESIN NOTULEN v3 (lokal, tanpa API) — pengganti analyze() lama
+   - segmentasi topik berdasarkan kesamaan isi + jeda waktu (bukan bigram acak)
+   - judul topik dari frasa benda yang benar-benar dibahas
+   - kalimat orang pertama ditulis ulang memakai NAMA pembicara + konjugasi yang benar
+   - ringkasan eksekutif berparagraf (konteks, alur pembahasan, isu/keputusan/tindak lanjut)
+   - action item ketat: hanya komitmen / penugasan nyata (bukan saran ke pendengar)
+   - cek-mikrofon, salam, dan pengulangan latihan tidak ikut tercatat
+   ====================================================================== */
+var INTRO=/^(?:next|the next|selanjutnya|berikutnya) (?:topic|item|agenda|topik|pembahasan)\b|\b(?:akan (?:menjelaskan|membahas|menyampaikan|mempresentasikan|memaparkan)|hari ini (?:kita |saya |kami )?(?:bahas|jelaskan|sampaikan)|would like to (?:talk|discuss|introduce|explain|present)|will (?:talk|explain|discuss|present|cover)|today (?:we|i)(?: will|'ll)?\b)/i;
+var MICCHECK=/\b(?:can you hear|do you hear|is (?:my )?(?:voice|audio|mic|microphone|sound) (?:clear|ok|okay|working|audible)|(?:mic|microphone|audio|sound|voice) (?:check|test)|testing,? (?:testing|one|1)|apakah suara|suara (?:saya |kami )?(?:terdengar|jelas)|terdengar (?:jelas|dengan jelas)|tes(?:t)? (?:suara|mic|audio)|cek (?:suara|mic|audio))\b/i;
+var GREET2=/\b(?:hello|hi|hey|halo|hai|good (?:morning|afternoon|evening|day)|selamat (?:pagi|siang|sore|malam|datang)|welcome|nice to meet you|pleased to meet you|thank you|thanks|terima ?kasih|hard work|good work|well done|see you|sampai jumpa|goodbye|bye|assalamualaikum|wassalam|sekian|mohon bantuan|mohon kerja ?sama|salam kenal|mari kita mulai|let's (?:start|begin)|shall we (?:start|begin))\b/i;
+var FILLER_INLINE=/\b(?:apa ya|ya kan|kan ya|gitu loh|ya gitu|gitu ya|you know|i mean|kind of|sort of|sih|deh|dong|kok|ehm|hmm+|umm?|ee+|anu)\b,?/gi;
+var LEAD_JUNK=/^(?:(?:and|but|so|then|also|right|well|yes|yeah|okay|ok|like|sure|exactly|correct|absolutely|certainly|dan|tapi|tetapi|lalu|terus|kemudian|jadi|nah|oke|iya|ya|baik|baiklah|betul|benar|tentu|tentunya|siap|sip)\b[\s,]*)+/i;
+var GREET_LEAD=/^(?:(?:good (?:morning|afternoon|evening|day)|hello|hi|hey|halo|hai|selamat (?:pagi|siang|sore|malam)|welcome|selamat datang|everyone|everybody|semuanya|rekan-rekan|teman-teman|let['’]?s (?:start|begin|get started)|mari (?:kita )?mulai)\b[\s,.!]*|(?:thank you|thanks|terima kasih)(?: (?:everyone|all|semuanya))?[,.!]\s*)+/i;
+var DISC=/^(?:from now on|after all|by the way|of course|in other words|that is|therefore|however|besides|anyway|basically|actually|honestly|firstly|secondly|thirdly|finally|in addition|moreover|for example|for instance|in fact|as a result|meanwhile|incidentally|pada dasarnya|sebenarnya|tentu saja|omong-omong|ngomong-ngomong|selain itu|dengan kata lain|misalnya|contohnya|akhirnya)\b[\s,]*/i;
+var LANGLABEL=/^(?:Japanese|English|Indonesian|Chinese|Korean|Arabic|Thai|Vietnamese|Malay)\s+(?=(?:Today|Hello|Welcome|Now|This|So|First|Okay|OK|Hi|Good|Please|Let)\b)/;
+var SUBORD=/^(?:when|while|before|after|because|although|though|since|as soon as|whenever|even if|unless|until|saat|ketika|sebelum|setelah|karena|walaupun|meskipun|jika|kalau)\b/i;
+var TAIL_JUNK=/(?:\s+(?:and|or|but|because|so|of|to|in|on|for|with|the|a|an|dan|atau|yang|untuk|dengan|dari|di|ke|karena|sehingga|bahwa|adalah|artinya|ketika|yaitu|yakni|seperti|saat|jika|kalau|sebagai|sambil|lalu|kemudian|tapi|namun|maka|agar|supaya|hingga|sampai|ialah|even|then))+([.?!]*)$/i;
+var ISSUE3=new RegExp(ISSUE.source+'|\\b(?:concern(?:ed|s)?|challenge[sd]?|difficult(?:y|ies)?|struggl\\w+|khawatir|cemas|sulit|susah|kesulitan|tantangan|salah (?:ambil|pengambilan|alamat|part)|mismatch|error|kesalahan|backlog|overdue|shortage)\\b','i');
+var COND_START=/^(?:if|when|once|whenever|unless|kalau|kalo|jika|apabila|bila|seandainya|supaya|agar)\b/i;
+var WORKV={};('send check prepare update create finalize finalise finish complete submit review confirm schedule fix repair replace order arrange contact coordinate evaluate investigate analyze analyse propose follow implement install test monitor verify validate collect upload register revise improve deliver report assign book reserve notify inform request draft design build develop apply approve sign print forward reply respond recheck trial standardize train set make').split(' ').forEach(function(w){WORKV[w]=1;});
+var SPEECHV={talk:1,speak:1,discuss:1,introduce:1,explain:1,tell:1,mention:1,cover:1,say:1,share:1,present:1,show:1,bahas:1,jelaskan:1,sampaikan:1,ceritakan:1,perkenalkan:1,paparkan:1};
+var LABEL_BAD={};('thing things something anything everything nothing people person speaker speakers participant participants audience time times way ways lot lots kind kinds type types example examples case cases point points one ones new first second third today really always never also just only very much many more most some any other another same such several various like etc sort bit ever ahead away together forward back soon ago again almost yet else perhaps maybe topics topic theme per satu dua tiga hari tanggal bulan minggu tahun menit jam detik senin selasa rabu kamis jumat sabtu minggu januari februari maret april mei juni juli agustus september oktober november desember monday tuesday wednesday thursday friday saturday sunday january february march april june july august october december minute minutes hour hours day days week weeks month months year years lagi while whilst though although unless until whenever whether despite instead rather however therefore anyway besides sebelumnya setelahnya sesudahnya depan lalu tolong mohon harap tadi nanti sering selalu kadang terjadi tercatat terutama langsung tinggal masih segera secara hasil sendiri punya cek kirim siapkan buat bantu lihat ambil pakai pasang tulis bawa isi tutup buka hubungi lakukan tambah ubah ganti tanya jawab pilih mulai selesai lanjut kendala complete whole entire real big small good bad great important main basic general possible necessary different similar certain specific full long short high low old young right left next last early late opposite actually hal orang sesuatu cara waktu contoh kali temen teman semua beberapa banyak sedikit sekali ini itu tersebut kata').split(' ').forEach(function(w){LABEL_BAD[w]=1;});
+var VERBLIKE={};('say said talk speak think thought know make made take took go went come came get got want need worry begin start introduce hope learn love like find tell see look feel try use give work help keep let put show turn move run play stay ask call become seem happen mean believe wish plan expect decide choose bring write read depends depend charge charges').split(' ').forEach(function(w){VERBLIKE[w]=1;});
+'him them himself herself itself themselves myself yourself ourselves whom whose mine yours'.split(' ').forEach(function(w){STOP[w]=1;});
+var ID_NOUN_OK={member:1,meeting:1,memo:1,metode:1,mekanik:1,mekanisme:1,menara:1,metrik:1,material:1,mesti:1,mendesak:1};
+function verbForm(l){
+  if(VERBLIKE[l]||PASTIRR[l])return true;
+  var b=[l.replace(/ies$/,'y'),l.replace(/es$/,''),l.replace(/s$/,''),l.replace(/ed$/,''),l.replace(/ed$/,'e'),l.replace(/ing$/,''),l.replace(/ing$/,'e')];
+  return b.some(function(x){return x!==l&&VERBLIKE[x];});
+}
+function idVerb(w){return (/^(?:me|mem|men|meng|meny|ber|ter)[a-z]{4,}$/.test(w)||/^di[a-z]{4,}(?:kan|i)$/.test(w)||/^[a-z]{3,}kan$/.test(w))&&!ID_NOUN_OK[w]&&w!=='bukan'&&w!=='makan'&&w!=='kantor';}
+function firstName(n){return String(n||'').trim().split(/\s+/)[0]||'Peserta';}
+function contentCount(ws){var n=0;ws.forEach(function(w){if(!STOP[w]&&w.length>2&&!GREET2.test(w))n++;});return n;}
+var CLOSING=/\b(?:(?:rapat|meeting|sesi|pertemuan)\s+(?:kita\s+)?(?:di)?tutup|(?:meeting|session)\s+(?:is\s+)?(?:closed|adjourned|over|ended)|wrap(?:ping)? up|sampai (?:di sini|jumpa)|cukup sekian|that(?:'s| is) all for (?:today|now))\b/i;
+function isSmallTalk(t,ws){
+  if(MICCHECK.test(t)||CLOSING.test(t))return true;
+  return GREET2.test(t)&&ws.length<=9&&contentCount(ws)<=2;
+}
+/* kata kerja kerja-nyata di belakang modal (will/akan/perlu...) → penanda action item */
+function actionVerbOf(t,multi){
+  var m,re=/\b(?:perlu|harus|akan|mau|bakal|wajib|need(?:s)? to|has to|have to|must|should|will|shall|going to|i['’]ll|we['’]ll)\s+(?:also\s+|juga\s+|segera\s+|please\s+)?([a-z]+)/ig;
+  while((m=re.exec(t))){var v=lc(m[1]);if(SPEECHV[v])continue;if(WORKV[v]||isActionVerb(v))return v;}
+  if(multi){
+    var im=/\b(?:tolong|mohon|harap|please|pastikan)\s+(?:(?:segera|kindly|just)\s+)?([a-z]+)/i.exec(t);
+    if(im){var v2=lc(im[1]);if(!SPEECHV[v2]&&(WORKV[v2]||isActionVerb(v2)))return v2;}
   }
+  return '';
+}
+/* ---------------- penulisan ulang: orang pertama → nama pembicara ---------------- */
+var PRE_ID2=PRE_ID+'|menurut|kata|buat|tolong|bantu|minta|izinkan|mohon';
+var ADV3='also|always|usually|generally|often|sometimes|really|just|still|even|already|never|only|actually|basically|especially|rarely|currently|probably|certainly|definitely|simply|quickly|finally|both|all|each|first|then|now';
+var NOCONJ={};('and or but who which that to of in on at for with from by as if because so than then when while where whose is was will would can could should must may might shall does did has had been being not no yes about into over under after before during through between since until upon within without whether what how why').split(' ').forEach(function(w){NOCONJ[w]=1;});
+var PASTIRR={};('was had did went saw said made took came got gave found thought knew told felt began built bought brought chose heard kept left lost met paid put read ran sat sent spent stood taught understood won wrote became set cut').split(' ').forEach(function(w){PASTIRR[w]=1;});
+function keepCase(src,out){return /^[A-Z]/.test(src)?cap(out):out;}
+function conj3(w){
+  var l=lc(w),IR={have:'has',are:'is',were:'was',am:'is','do':'does',"don't":"doesn't","haven't":"hasn't","aren't":"isn't","weren't":"wasn't"};
+  if(IR[l])return keepCase(w,IR[l]);
+  if(NOCONJ[l]||PASTIRR[l])return w;
+  if(/^[A-Z]/.test(w))return w;
+  if(!/^[a-z]+$/.test(l)||l.length<2)return w;
+  if(/ed$/.test(l)&&l.length>3)return w;
+  if(/ss$/.test(l))return w+'es';
+  if(/s$/.test(l))return w;
+  if(/(?:sh|ch|x|z|o)$/.test(l))return w+'es';
+  if(/[^aeiou]y$/.test(l))return w.slice(0,-1)+'ies';
+  return w+'s';
+}
+function agree(s,subjects){
+  subjects.forEach(function(sub){
+    var re=new RegExp('\\b('+sub.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')((?:\\s+(?:'+ADV3+'))*)\\s+([A-Za-z]+(?:n[’\']t)?)\\b','g');
+    s=s.replace(re,function(m,a,adv,v,off,str){
+      var pw=(/([A-Za-z]+)\s*$/.exec(str.slice(0,off))||[])[1];
+      if(pw&&/^(?:can|could|will|would|should|do|does|did|must|may|might|shall|to|and|or|let|not|if|whether)$/i.test(pw))return m;
+      return a+adv+' '+conj3(v);});
+  });
   return s;
 }
-var VERBS={
-  id:{gen:['menjelaskan bahwa','menyampaikan bahwa','menambahkan bahwa','menegaskan bahwa','mencatat bahwa'],issue:['menyoroti bahwa','melaporkan bahwa','mengangkat isu bahwa'],q:['mempertanyakan'],act:['menyatakan bahwa']},
-  en:{gen:['explained that','noted that','added that','emphasized that','mentioned that'],issue:['highlighted that','reported that','raised the issue that'],q:['asked'],act:['stated that']}
-};
-var IMP={id:{gen:['Dijelaskan bahwa','Disampaikan bahwa','Ditegaskan bahwa','Dicatat bahwa','Dikemukakan bahwa'],issue:['Disoroti bahwa','Dilaporkan bahwa'],q:['Dipertanyakan'],dec:'Disepakati bahwa'},
-         en:{gen:['It was explained that','It was noted that','It was emphasized that','It was mentioned that'],issue:['It was highlighted that','It was reported that'],q:['The question raised was'],dec:'It was agreed that'}};
-function rot(R,key,arr){var u=R[key]||(R[key]=[]),c=arr.filter(function(x){return u.indexOf(x)<0;});if(!c.length){u.length=0;c=arr;}var v=c[0];u.push(v);return v;}
-/* satu klausa -> satu kalimat informasi */
-function phrase(s,kind,ctx){
-  var al=ctx.al,I18=al==='id',multi=ctx.multi,R=ctx.rot;
-  var text=s.text.replace(/[\s.?!…]+$/,'');
-  if(kind==='dec'){
-    var dm=/^(?:kami|kita|saya|aku|tim|we|i)?\s*(?:sepakat|setuju|menyepakati|memutuskan|menetapkan|agree[ds]?|decided)\s*(bahwa|untuk|that|to)?\s*/i.exec(text),conn=dm&&dm[1]?lc(dm[1]):'';
-    var body=dm?text.slice(dm[0].length):text;
-    body=condense(rewrite(body||text,al,'plain'),ctx.max);
-    var head=(conn==='untuk'||conn==='to')?(I18?'Disepakati untuk':'It was agreed to'):(I18?IMP.id.dec:IMP.en.dec);
-    return head+' '+lowerFirst(body)+'.';
-  }
-  if(s.q){
-    var qb=condense(rewrite(text,al,'plain'),ctx.max);
-    return multi?(s.who+' '+rot(R,'q',(I18?VERBS.id:VERBS.en).q)+' '+lowerFirst(qb)+'?'):((I18?IMP.id.q[0]:IMP.en.q[0])+' '+lowerFirst(qb)+'.').replace(/\?\.$/,'?');
-  }
-  var body2=condense(rewrite(text,al,multi?'attr':'plain'),ctx.max);
-  if(multi){
-    var vs=(kind==='issue')?(I18?VERBS.id:VERBS.en).issue:(I18?VERBS.id:VERBS.en).gen;
-    return s.who+' '+rot(R,kind==='issue'?'vi':'vg',vs)+' '+lowerFirst(body2)+'.';
-  }
-  if(kind==='issue'&&ctx.plainIssue)return cap(body2)+'.';
-  return cap(body2)+'.';
+function rewriteEN(s,spk,multi){
+  var A=multi?'participants':'people',poss=multi?"participants'":'their',spkP=spk+"'s";
+  s=String(s||'')
+   .replace(/\bI['’]m\b/g,spk+' is').replace(/\bI['’]ve\b/g,spk+' has').replace(/\bI['’]ll\b/g,spk+' will').replace(/\bI['’]d\b/g,spk+' would')
+   .replace(/\bI am\b/g,spk+' is').replace(/\bI have\b/g,spk+' has').replace(/\bI\b/g,spk)
+   .replace(/\b[Mm]y\b/g,spkP).replace(/\b[Mm]yself\b/g,spk).replace(/\b[Mm]e\b/g,spk)
+   .replace(/\b[Ww]e['’]re\b/g,'the team is').replace(/\b[Ww]e['’]ll\b/g,'the team will').replace(/\b[Ww]e['’]ve\b/g,'the team has')
+   .replace(/\b[Ww]e\b/g,'the team').replace(/\b[Oo]ur\b/g,"the team's").replace(/\b[Uu]s\b/g,'the team')
+   .replace(/\b[Yy]ou['’]re\b/g,A+(multi?' are':' are')).replace(/\b[Yy]ou['’]ll\b/g,A+' will').replace(/\b[Yy]ou['’]ve\b/g,A+' have').replace(/\b[Yy]ou['’]d\b/g,A+' would')
+   .replace(/\b[Yy]our\b/g,poss).replace(/\b[Yy]ou\b/g,A);
+  s=agree(s,[spk,'the team']);
+  s=s.replace(/\bthe team's\b/g,"the team's").replace(/\s{2,}/g,' ').trim();
+  return s;
 }
-
-/* ---------------- analisis ---------------- */
+function rewriteID(s,spk,multi){
+  var A=multi?'peserta':'pendengar';
+  s=String(s||'').replace(/\b(?:saya|aku|gue|gua)\b/gi,spk).replace(/\b(?:kami|kita)\b/gi,'tim').replace(/\b(?:anda|kamu|kalian)\b/gi,A)
+   .replace(/\s{2,}/g,' ').trim();
+  return s;
+}
+function rewriteTxt(s,al,spk,multi){return al==='id'?rewriteID(s,spk,multi):rewriteEN(s,spk,multi);}
+/* ---------------- analisis v3 ---------------- */
+function isIssue(c){
+  var m=ISSUE3.exec(c);if(!m)return false;
+  var cond=/\b(?:kalau|kalo|jika|apabila|bila|if|whenever|when)\b/i.exec(c);
+  if(cond&&cond.index<m.index)return false;
+  var pre=c.slice(0,m.index).split(/\s+/).slice(-4).join(' ');
+  if(/\b(?:tidak|tak|no|not|without|tanpa|zero|nol|bebas|never|lagi)\b/i.test(pre))return false;
+  if(/\b(?:harap(?:an)?(?:nya)?|hope|expect(?:ed|ation)?|tujuan|goal|target|supaya|agar)\b/i.test(c))return false;
+  return true;
+}
+function segCount(N){return N<11?1:Math.max(2,Math.min(8,Math.round(N/7)));}
+function cosv(a,b){var dot=0,na=0,nb=0,k;for(k in a){na+=a[k]*a[k];if(b[k])dot+=a[k]*b[k];}for(k in b)nb+=b[k]*b[k];return (na&&nb)?dot/Math.sqrt(na*nb):0;}
+function prefMerge(a,b){
+  if(a===b)return true;
+  var n=Math.min(a.length,b.length),p=0;while(p<n&&a.charAt(p)===b.charAt(p))p++;
+  return p>=5&&p>=n-1;
+}
 function analyze(items,opt){
-  opt=opt||{};var al=opt.lang==='id'?'id':'en',I18=al==='id';
+  opt=opt||{};
+  var al=opt.lang==='id'?'id':'en',I18=al==='id';
   var pmap={},plist=[];
   items.forEach(function(it){
     var nm=String(it.name||'Peserta').trim()||'Peserta',k=lc(nm);
@@ -3377,127 +3453,346 @@ function analyze(items,opt){
   });
   var multi=plist.length>1;
   PROPER={};plist.forEach(function(p){PROPER[lc(p.name.split(' ')[0])]=1;});
-  (function(){var lowSeen={},capSeen={};items.forEach(function(it){String(it.text||'').split(/\s+/).forEach(function(w){w=w.replace(/[^A-Za-z\u00C0-\u024F]/g,'');if(w.length<3)return;if(/^[a-z]/.test(w))lowSeen[w]=1;else if(/^[A-Z][a-z]/.test(w))capSeen[lc(w)]=1;});});
-    Object.keys(capSeen).forEach(function(k){if(!lowSeen[k]&&!STOP[k]&&!/^(apakah|bagaimana|mengapa|kenapa|kapan|siapa|berapa|yang|dalam|setiap|tentu|kemudian|problem|beberapa|selama|hal|menurut|saya|tidak|dan)$/.test(k))PROPER[k]=1;});})();
+  (function(){var lowSeen={},capSeen={};
+    items.forEach(function(it){splitSentences(it.text).forEach(function(sn){sn.split(/\s+/).forEach(function(w,j){
+      w=w.replace(/[^A-Za-z\u00C0-\u024F]/g,'');if(w.length<3)return;
+      if(/^[a-z]/.test(w))lowSeen[w]=1;else if(j>0&&/^[A-Z][a-z]/.test(w))capSeen[lc(w)]=1;});});});
+    Object.keys(capSeen).forEach(function(k){if(!lowSeen[k]&&!STOP[k])PROPER[k]=1;});})();
+  var model={al:al,N:0,items:items.length,multi:multi,
+    participants:plist.map(function(p){return {name:cap(p.name),n:p.n,langs:Object.keys(p.langs).join(', ')};}),
+    subject:'',summary:[],topics:[],issues:[],decisions:[],actions:[],questions:[],conclusion:'',keywords:[]};
+  /* ---- 1) kalimat bersih ---- */
   var S=[],seen=[];
   items.forEach(function(it){
+    var who=cap(String(it.name||'Peserta').trim()||'Peserta'),ts=Number(it.ts)||0;
     splitSentences(it.text).forEach(function(raw){
-      var t=cleanSentence(raw);if(!t||GREET.test(t))return;
-      clauses(t).forEach(function(c){
-        c=cleanSentence(c).replace(/(?:\s+(?:yang|dan yang)\s+(?:pertama|kedua|ketiga|keempat|kelima)(?:\s+adalah)?)?(?:\s+(?:memiliki|adalah|yaitu|yakni|dengan|yang|dan|untuk|ke|di|dari|pada|bahwa|karena|sehingga|the|and|of|to|that|which))*([.?!]*)$/i,'$1').trim();
-        if(c.length&&!/[.?!]$/.test(c))c+='.';
-        var ws=words(c);if(ws.length<5&&!/\d/.test(c))return;
-        if(/^(?:itu|ini|hal ini|hal itu|that|this|it)\b/i.test(c)&&ws.length<9)return;
-        var key=ws.filter(function(w){return !STOP[w];}).map(stem);
-        for(var j=0;j<seen.length;j++)if(jacc(key,seen[j])>=0.85)return;
+      var t0=cleanSentence(raw);if(!t0)return;
+      clauses(t0).forEach(function(c){
+        c=cleanSentence(c).replace(FILLER_INLINE,' ').replace(/\s{2,}/g,' ').trim();
+        if(I18)c=c.replace(/\b([A-Za-z]{3,}) \1\b/gi,function(m,w){return STOP[lc(w)]?m:w+'-'+w;});
+        c=c.replace(LANGLABEL,'').replace(/^(?:pak|bu|ibu|bapak|mas|mbak)\s+[A-Za-z]+\s*,\s*/i,'');
+        for(var z=0;z<5;z++){var n2=c.replace(GREET_LEAD,'').replace(LEAD_JUNK,'').replace(DISC,'');if(n2===c)break;c=n2;}
+        c=c.replace(TAIL_JUNK,'$1').replace(/\s+([,.?!])/g,'$1').trim();
+        if(!c)return;
+        c=cap(c);
+        var ws=words(c);
+        if(isSmallTalk(c,ws))return;
+        if(ws.length<4&&!/\d/.test(c))return;
+        if(SUBORD.test(c)&&ws.length<7)return;
+        if(/^(?:itu|ini|hal ini|hal itu|that|this|it)\b/i.test(c)&&ws.length<7)return;
+        if(!/[.?!]$/.test(c))c+='.';
+        var key=ws.filter(function(w){return !STOP[w]&&w.length>2;}).map(stem);
+        var dup=-1;
+        for(var j=0;j<seen.length;j++)if(jacc(key,seen[j])>=0.8){dup=j;break;}
+        if(dup>=0){if(S[dup]&&c.length>S[dup].text.length*1.15){S[dup].text=c;S[dup].ws=ws;}return;}
         seen.push(key);
-        var q=/\?\s*$/.test(c)||(/^(apakah|kapan|siapa|mengapa|kenapa|berapa|bagaimana|what|how|when|who|why|where|could you|can you|do you|does it|is it|are there)\b/i.test(c)&&ws.length<=26);
-        S.push({i:S.length,who:cap(String(it.name||'Peserta').trim()||'Peserta'),text:c,ws:ws,key:key,q:q,
-          issue:ISSUE.test(c)&&!/\b(?:hari ini (?:kita )?bahas|kita bahas|today we (?:review|discuss)|we (?:review|discuss)|agenda)\b/i.test(c),dec:DECISION.test(c)&&!q,act:hasAction(c)&&!q&&ws.length<=30,num:/\d/.test(c),time:TIMEX.exec(c)});
+        var q=/\?\s*$/.test(c)||(QWORD.test(c)&&ws.length<=26&&/\?/.test(raw));
+        var fp=/\b(?:i|we|i['’]ll|we['’]ll|i['’]d|saya|aku|kami|kita|gue)\b/i.test(c);
+        var av=(!q&&ws.length<=30&&!COND_START.test(c))?actionVerbOf(c,multi):'';
+        var act=!!av&&(multi||fp)&&!INTRO.test(c);
+        S.push({i:S.length,who:who,text:c,ws:ws,key:key,q:q,ts:ts,fp:fp,
+          issue:isIssue(c)&&!q&&!/^(?:is it|are you|what if|how (?:about|if)|do you|does it|apakah|bagaimana (?:jika|kalau))\b/i.test(c)&&!/^(?:next|the next|selanjutnya|berikutnya) (?:topic|item|agenda|topik|pembahasan)\b/i.test(c)&&!/\b(?:today (?:we|i)(?: will|'ll)? (?:review|discuss)|hari ini (?:kita |kami |saya )?(?:bahas|review)|hari ini (?:kita )?bahas|kita bahas|we (?:review|discuss)|agenda)\b/i.test(c),
+          dec:DECISION.test(c)&&!q,act:act,num:/\d/.test(c),time:TIMEX.exec(c),
+          qual:ws.length?contentCount(ws)/ws.length:0,sub:SUBORD.test(c),
+          intro:INTRO.test(c)});
       });
     });
   });
-  var N=S.length;
-  var model={al:al,N:N,items:items.length,multi:multi,participants:plist.map(function(p){return {name:cap(p.name),n:p.n,langs:Object.keys(p.langs).join(', ')};}),
-    subject:'',summary:[],topics:[],issues:[],decisions:[],actions:[],questions:[],conclusion:'',keywords:[]};
+  var N=S.length;model.N=N;
   if(!N)return model;
-  /* kata & frasa kunci */
-  var tf={},df={},surf={},bg={};
-  S.forEach(function(s){var seenK={},prev=null;
-    s.ws.forEach(function(w){
-      var ok=!STOP[w]&&w.length>2&&!/^\d+$/.test(w);
-      if(ok){var k=stem(w);tf[k]=(tf[k]||0)+1;(surf[k]=surf[k]||{})[w]=(surf[k][w]||0)+1;if(!seenK[k]){seenK[k]=1;df[k]=(df[k]||0)+1;}
-        if(prev){var b=stem(prev)+' '+k;(bg[b]=bg[b]||{n:0,s:prev+' '+w}).n++;}}
-      prev=ok?w:null;});});
-  var minTf=N<8?1:2,cand=Object.keys(tf).filter(function(k){return tf[k]>=minTf;}).map(function(k){
-    var common=df[k]/N>0.6?0.4:1;return {k:k,sc:tf[k]*(1+Math.log(1+df[k]))*common};}).sort(function(a,b){return b.sc-a.sc;});
-  var bigr=Object.keys(bg).filter(function(b){return bg[b].n>=2;}).sort(function(a,b){return bg[b].n-bg[a].n;});
-  function surface(k){var o=surf[k]||{},best=k,bv=0;Object.keys(o).forEach(function(w){if(o[w]>bv){bv=o[w];best=w;}});return best;}
-  var K=Math.max(1,Math.min(5,Math.round(N/5)+1)),tseeds=cand.slice(0,K);
-  var asg=S.map(function(s){var best=-1,bv=0;tseeds.forEach(function(sd,ti){var c=0;s.key.forEach(function(k){if(k===sd.k)c++;});var v=c*sd.sc;if(v>bv){bv=v;best=ti;}});return best;});
-  for(var i=0;i<N;i++){if(asg[i]<0){var p=i-1;while(p>=0&&asg[p]<0)p--;var n2=i+1;while(n2<N&&asg[n2]<0)n2++;asg[i]=p>=0?asg[p]:(n2<N?asg[n2]:0);}}
-  var cm={};asg.forEach(function(t,i){(cm[t]=cm[t]||[]).push(i);});
-  var cl=Object.keys(cm).map(function(t){return {t:+t,idx:cm[t]};});
-  if(cl.length>1){cl.sort(function(a,b){return a.idx.length-b.idx.length;});
-    while(cl.length>1&&cl[0].idx.length<2){var sm=cl.shift(),tg=cl.reduce(function(b,c){return c.idx.length>b.idx.length?c:b;},cl[0]);tg.idx=tg.idx.concat(sm.idx).sort(function(a,b){return a-b;});}}
-  cl.sort(function(a,b){return a.idx[0]-b.idx[0];});
-  var topw={};cand.slice(0,12).forEach(function(c){topw[c.k]=c.sc;});
-  function score(s){var v=0;s.key.forEach(function(k){if(topw[k])v+=topw[k];});v=v/Math.sqrt(s.ws.length+3);if(s.issue||s.dec||s.act)v+=0.6;if(s.num)v+=0.3;if(s.q)v-=0.5;if(s.ws.length<5)v-=0.4;return v;}
+  /* ---- 2) istilah: stem kanonik, df, idf ---- */
+  var tfG={},surf={};
+  S.forEach(function(s){s.stems=[];s.ws.forEach(function(w){
+    if(STOP[w]||w.length<3||/^\d+$/.test(w))return;
+    var k=stem(w);s.stems.push(k);tfG[k]=(tfG[k]||0)+1;(surf[k]=surf[k]||{})[w]=(surf[k][w]||0)+1;});});
+  var canon={},reps=Object.keys(tfG).sort(function(a,b){return (tfG[b]-tfG[a])||(a.length-b.length);}),repList=[];
+  reps.forEach(function(k){
+    for(var r=0;r<repList.length;r++){if(prefMerge(repList[r],k)){canon[k]=repList[r];return;}}
+    canon[k]=k;repList.push(k);
+  });
+  var df={},idf={};
+  S.forEach(function(s){s.key=s.stems.map(function(k){return canon[k]||k;});var u={};s.key.forEach(function(k){if(!u[k]){u[k]=1;df[k]=(df[k]||0)+1;}});});
+  Object.keys(df).forEach(function(k){idf[k]=Math.log(1+N/df[k]);});
+  function vecOf(idxs){var v={};idxs.forEach(function(i){S[i].key.forEach(function(k){v[k]=(v[k]||0)+idf[k];});});return v;}
+  /* ---- 3) segmentasi topik (kesamaan isi + jeda waktu) ---- */
+  var K=segCount(N),bounds=[];
+  if(K>1){
+    var gs=[];
+    for(var g=1;g<N;g++){
+      var Lb=[],Rb=[];for(var a=Math.max(0,g-3);a<g;a++)Lb.push(a);for(var b=g;b<Math.min(N,g+3);b++)Rb.push(b);
+      var sc=1-cosv(vecOf(Lb),vecOf(Rb));
+      var gap=(S[g].ts&&S[g-1].ts)?(S[g].ts-S[g-1].ts):0;
+      if(gap>40000)sc+=Math.min(0.4,gap/300000);
+      if(S[g].who!==S[g-1].who)sc+=0.05;
+      gs.push({g:g,sc:sc});
+    }
+    gs.sort(function(x,y){return y.sc-x.sc;});
+    var minSeg=Math.max(2,Math.floor(N/(K*2)));
+    gs.forEach(function(x){
+      if(bounds.length>=K-1)return;
+      if(x.g<minSeg||N-x.g<minSeg)return;
+      for(var q=0;q<bounds.length;q++)if(Math.abs(bounds[q]-x.g)<minSeg)return;
+      bounds.push(x.g);
+    });
+    bounds.sort(function(x,y){return x-y;});
+  }
+  var segs=[],st=0;
+  bounds.concat([N]).forEach(function(e){var r=[];for(var i=st;i<e;i++)r.push(i);if(r.length)segs.push(r);st=e;});
+  /* ---- 4) frasa benda per kalimat (kandidat judul topik) ---- */
+  function chunksOf(s){
+    var toks=s.text.match(/[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'’-]*/g)||[],out=[],run=[];
+    function flush(){if(run.length){var r=run;if(r.length>3)r=I18?r.slice(0,3):r.slice(-3);out.push(r);}run=[];}
+    toks.forEach(function(w,i){
+      var l=lc(w),ok=!STOP[l]&&l.length>2&&!/['’]/.test(w)&&!LABEL_BAD[l]&&!PNAME[l]&&!(!I18&&verbForm(l))&&posOk(l,false);
+      if(ok)run.push({w:w,l:l,cap:(i>0&&/^[A-Z][a-z]/.test(w)),k:(canon[stem(l)]||stem(l))});else flush();
+    });
+    flush();
+    if(!I18)out=out.map(function(r){while(r.length&&!posOk(r[r.length-1].l,true))r=r.slice(0,-1);return r;}).filter(function(r){return r.length;});
+    return out;
+  }
+  var DET={},PREPN={},VPRE={},COP={};
+  'the a an this that these those my our your their his her its many some various any each every such other another several few most all both'.split(' ').forEach(function(w){DET[w]=1;});
+  'of in about for with from on at into over under between during through after before'.split(' ').forEach(function(w){PREPN[w]=1;});
+  'to i we you he she they it can will would could should must may might shall dont doesnt didnt wont cant not'.split(' ').forEach(function(w){VPRE[w]=1;});
+  'is are was were be been being am really very quite so too more most extremely rather pretty fairly'.split(' ').forEach(function(w){COP[w]=1;});
+  var EV={};
+  if(!I18)S.forEach(function(s){
+    var tk=s.text.match(/[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'’-]*/g)||[];
+    tk.forEach(function(w,i){
+      var l=lc(w).replace(/['’]/g,''),pv=i>0?lc(tk[i-1]).replace(/['’]/g,''):'',e=EV[l]||(EV[l]={n:0,v:0,a:0});
+      if(DET[pv])e.n+=1;else if(PREPN[pv])e.n+=0.4;
+      if(VPRE[pv])e.v+=1;
+      if(COP[pv])e.a+=1;
+      if(/(?:ed|ing)$/.test(l)&&l.length>4)e.v+=0.5;
+    });
+  });
+  function nounSuf(l){return /(?:tion|sion|ment|ness|ity|ship|ance|ence|ism|ist|age|ure|er|or)$/.test(l);}
+  function posOk(l,head){
+    if(I18)return !idVerb(l);
+    if(/ly$/.test(l)&&l.length>4)return false;
+    var e=EV[l]||{n:0,v:0,a:0};
+    if(e.v>e.n&&!nounSuf(l))return false;
+    if(head&&e.a>e.n&&!nounSuf(l))return false;
+    return true;
+  }
+  var PNAME={};plist.forEach(function(p){p.name.toLowerCase().split(/\s+/).forEach(function(w){PNAME[w]=1;});});
+  var CH={};
+  S.forEach(function(s){
+    var u={};
+    function addCh(r){
+      var key=r.map(function(t){return t.k;}).join('_');if(u[key])return;u[key]=1;
+      var c=CH[key]||(CH[key]={key:key,docN:0,seg:{},forms:{},toks:r,cap:false});
+      c.docN++;var f=r.map(function(t){return t.w;}).join(' ');c.forms[f]=(c.forms[f]||0)+1;
+      if(r.some(function(t){return t.cap;}))c.cap=true;
+      s.chunkKeys=(s.chunkKeys||[]);s.chunkKeys.push(key);
+    }
+    chunksOf(s).forEach(function(r){addCh(r);if(r.length>1)r.forEach(function(t){addCh([t]);});});
+  });
+  var usedLabel={};
+  function labelFor(idx){
+    var tfS={},segC={};
+    var segW={};
+    idx.forEach(function(i){S[i].key.forEach(function(k){tfS[k]=(tfS[k]||0)+1;});(S[i].chunkKeys||[]).forEach(function(ck){segC[ck]=(segC[ck]||0)+1;segW[ck]=(segW[ck]||0)+Math.max(0.05,S[i].sc);});});
+    var cand=Object.keys(segC).map(function(ck){
+      var c=CH[ck],toks=c.toks,n=toks.length,tokSc=0;
+      toks.forEach(function(t){tokSc+=(tfS[t.k]||1)*(idf[t.k]||1);});tokSc/=n;
+      var fr=segW[ck]+0.2*segC[ck],len=(n===1?1:n===2?1.35:1.45),spec=0.4+0.6*segC[ck]/c.docN;
+      var vl=toks.map(function(t){return verbForm(t.l)||(I18&&idVerb(t.l));}),allV=vl.every(Boolean),vp=1;
+      if(allV)vp=n===1?0.4:0.3;else if(vl[0]&&n>1)vp=0.85;
+      var hd=I18?toks[0]:toks[n-1],hev=EV[hd.l],hb=(!I18&&hev&&hev.n>=1)?1.3:1;
+      var sc=(fr+0.5)*tokSc*len*spec*vp*hb*(c.cap?1.25:1)*(usedLabel[ck]?0.35:1);
+      var form=Object.keys(c.forms).sort(function(a,b){return c.forms[b]-c.forms[a];})[0];
+      return {ck:ck,sc:sc,form:form,toks:toks};
+    }).filter(function(x){return x.form&&x.form.length>=3;}).sort(function(a,b){return b.sc-a.sc;});
+    if(!cand.length){
+      var tk=Object.keys(tfS).sort(function(a,b){return tfS[b]*idf[b]-tfS[a]*idf[a];})[0];
+      var sf=tk&&Object.keys(surf[tk]||{}).sort(function(a,b){return surf[tk][b]-surf[tk][a];})[0];
+      return {text:titleCase(sf||(I18?'Pembahasan Umum':'General Discussion')),ck:''};
+    }
+    var best=cand[0];
+    if(best.toks.length===1){
+      var ext=cand.filter(function(o){return o.toks.length>1&&segC[o.ck]>=0.3*segC[best.ck]&&o.toks.some(function(t){return prefMerge(t.k,best.toks[0].k);});}).sort(function(a,b){return b.sc-a.sc;})[0];
+      if(ext)best=ext;
+    }
+    var label=best.form;usedLabel[best.ck]=1;
+    for(var q=1;q<Math.min(cand.length,6);q++){
+      var o=cand[q];
+      if(o.sc<best.sc*0.5)break;
+      var shared=o.toks.some(function(t){return best.toks.some(function(u){return u.k===t.k||prefMerge(u.k,t.k);});});
+      if(shared)continue;
+      if((label+' '+o.form).split(' ').length>4)continue;
+      label=label+' & '+o.form;usedLabel[o.ck]=1;break;
+    }
+    return {text:titleCase(label),ck:best.ck};
+  }
+  /* ---- 5) skor kalimat per segmen ---- */
+  segs.forEach(function(idx,gi){
+    var tfS={};idx.forEach(function(i){S[i].key.forEach(function(k){tfS[k]=(tfS[k]||0)+1;});});
+    var raw=idx.map(function(i){var s=S[i],u={},v=0;s.key.forEach(function(k){if(u[k])return;u[k]=1;v+=(tfS[k]||0)*idf[k];});return v/Math.sqrt(s.ws.length+4);});
+    var mx=Math.max.apply(null,raw.concat([0.0001]));
+    idx.forEach(function(i,p){
+      var s=S[i],v=raw[p]/mx;
+      if(s.issue||s.dec||s.act)v+=0.2;
+      if(s.num)v+=0.12;
+      if(s.q)v-=0.45;
+      if(s.ws.length<6)v-=0.3;
+      if(s.ws.length>38)v-=0.2;
+      if(s.qual<0.35)v-=0.4;
+      if(s.sub)v-=0.3;
+      if(s.intro)v-=0.35;
+      if(p===0)v+=0.12;
+      s.sc=v;s.seg=gi;
+    });
+  });
   var used={};
-  function pick(pred,n){return S.filter(pred).map(function(s){return {s:s,v:score(s)};}).sort(function(a,b){return b.v-a.v;}).slice(0,n).map(function(x){return x.s;}).sort(function(a,b){return a.i-b.i;});}
+  function pickTop(pred,n,sortBy){return S.filter(pred).sort(function(a,b){return b.sc-a.sc;}).slice(0,n).sort(function(a,b){return a.i-b.i;});}
   function uniq(list,n){return list.filter(function(s,i){for(var j=0;j<i;j++)if(jacc(s.key,list[j].key)>=0.5)return false;return true;}).slice(0,n);}
-  var ctx={al:al,multi:multi,rot:{},max:170};
-  var decs=uniq(pick(function(s){return s.dec;},6),3);decs.forEach(function(s){used[s.i]=1;});
-  var iss=uniq(pick(function(s){return s.issue&&!s.q&&!used[s.i];},6),4);iss.forEach(function(s){used[s.i]=1;});
-  var acts=S.filter(function(s){return s.act&&!used[s.i];}).slice(0,8);acts.forEach(function(s){used[s.i]=1;});
-  var qs=S.filter(function(s){return s.q&&s.ws.length>=4&&!used[s.i];}).slice(0,4);qs.forEach(function(s){used[s.i]=1;});
-  model.decisions=decs.map(function(s){return phrase(s,'dec',ctx);});
-  model.issues=iss.map(function(s){return phrase(s,'issue',ctx);});
-  var plainCtx={al:al,multi:false,rot:{},max:130};
-  var issPlain=iss.map(function(s){return phrase(s,'issue',plainCtx);});
-  model.questions=qs.map(function(s){return phrase(s,'q',ctx);});
-  /* action item: PIC & target hanya bila eksplisit */
+  /* ---- 6) pemformat kalimat informasi ---- */
+  var VB={
+    id:{gen:['menjelaskan bahwa','menyampaikan bahwa','menambahkan bahwa','menegaskan bahwa','mencatat bahwa'],issue:['menyoroti bahwa','melaporkan bahwa'],ask:'bertanya',dec:'Disepakati bahwa',decTo:'Disepakati untuk'},
+    en:{gen:['explained that','noted that','added that','emphasized that','mentioned that'],issue:['highlighted that','reported that'],ask:'asked',dec:'It was agreed that',decTo:'It was agreed to'}
+  }[al],vi=0,vg=0;
+  function endClean(b){return b.replace(/[\s.?!…,;:]+$/,'').replace(TAIL_JUNK,'').replace(/[\s.?!…,;:]+$/,'');}
+  function body(s,max){return endClean(condense(rewriteTxt(s.text,al,firstName(s.who),multi),max||200));}
+  function startsWithName(b,who){var f=firstName(who);return b.indexOf(f+' ')===0||b.indexOf(f+"'")===0;}
+  function fmtGen(s,kind,max,noAttr){
+    var b=body(s,max);if(!b)return '';
+    if(multi&&!noAttr&&!startsWithName(b,s.who)){
+      var verbs=kind==='issue'?VB.issue:VB.gen,v=kind==='issue'?verbs[(vi++)%verbs.length]:verbs[(vg++)%verbs.length];
+      return firstName(s.who)+' '+v+' '+lowerFirst(b)+'.';
+    }
+    return cap(b)+'.';
+  }
+  function fmtDec(s){
+    var text=s.text.replace(/[\s.?!…]+$/,'');
+    var dm=/^(?:(?:kami|kita|saya|aku|tim|we|i)\s+)?(?:sepakat|setuju|menyepakati|memutuskan|menetapkan|disepakati|diputuskan|ditetapkan|disetujui|agree[ds]?|decided|approved)\s*(bahwa|untuk|that|to)?\s*/i.exec(text),conn=dm&&dm[1]?lc(dm[1]):'';
+    var bd=dm?text.slice(dm[0].length):text;
+    bd=endClean(condense(rewriteTxt(bd||text,al,firstName(s.who),multi),180));
+    var personal=/^(?:saya|aku|i)\b/i.test(text);
+    if(personal)return firstName(s.who)+' '+(I18?'menyetujui ':'agreed ')+((conn==='untuk'||conn==='to')?(I18?'untuk ':'to '):(I18?'bahwa ':'that '))+lowerFirst(bd)+'.';
+    return ((conn==='untuk'||conn==='to')?VB.decTo:VB.dec)+' '+lowerFirst(bd)+'.';
+  }
+  function fmtQ(s){
+    var b=cap(endClean(rewriteTxt(s.text,al,firstName(s.who),multi).replace(/^(?:right|well|so)[,\s]+/i,'')));
+    return firstName(s.who)+' '+VB.ask+': \u201C'+condense(b,170)+'?\u201D';
+  }
+  /* ---- 7) keputusan, isu, action item, pertanyaan ---- */
+  var decs=uniq(pickTop(function(s){return s.dec;},6),3);decs.forEach(function(s){used[s.i]=1;});
+  var iss=uniq(pickTop(function(s){return s.issue&&!used[s.i];},6),3);iss.forEach(function(s){used[s.i]=1;});
+  var acts=S.filter(function(s){return s.act&&!used[s.i];}).slice(0,6);acts.forEach(function(s){used[s.i]=1;});
+  var qs=multi?S.filter(function(s){return s.q&&s.ws.length>=4&&!used[s.i]&&s.qual>=0.4;}).slice(0,4):[];qs.forEach(function(s){used[s.i]=1;});
+  model.decisions=decs.map(fmtDec);
+  model.issues=iss.map(function(s){return fmtGen(s,'issue',200);}).filter(Boolean);
+  var issPlain=iss.map(function(s){return cap(body(s,140))+'.';});
+  model.questions=qs.map(fmtQ);
   var names=plist.map(function(p){return p.name;}),actSeen=[];
   acts.forEach(function(s){
     if(actSeen.some(function(k){return jacc(k,s.key)>=0.7;}))return;actSeen.push(s.key);
     var low=lc(s.text),pic='';
-    for(var q=0;q<names.length;q++){var f=names[q].split(/\s+/)[0];if(f.length>=3&&new RegExp('\\b'+f.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(s.text)&&lc(f)!==lc(s.who.split(/\s+/)[0])){pic=names[q];break;}}
-    if(!pic){var tm=/\b(?:tim|team|bagian|divisi|dept|department)\s+([A-Za-z][\w&/-]{1,20})/i.exec(s.text);if(tm)pic=(I18?'Tim ':'Team ')+tm[1];}
-    if(!pic)pic=(/\b(kita|kami|we|let'?s)\b/i.test(low)&&!/\b(saya|aku|i will|i'll)\b/i.test(low))?(I18?'Tim (seluruh peserta)':'Team (all participants)'):s.who;
+    for(var q=0;q<names.length;q++){
+      var f=firstName(names[q]);
+      if(f.length>=3&&new RegExp('\\b'+f.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(s.text)&&lc(f)!==lc(firstName(s.who))){pic=names[q];break;}
+    }
+    if(!pic){var tm=/\b(?:tim|team|bagian|divisi|dept|department)\s+([A-Za-z][\w&/-]{1,20})\s+(?:akan|harus|perlu|will|should|to|segera)\b/i.exec(s.text);if(tm)pic=(I18?'Tim ':'Team ')+tm[1];}
+    if(!pic){
+      if(/\b(?:kita|let'?s)\b/i.test(low)&&!/\b(?:saya|aku|i will|i'll)\b/i.test(low))pic=I18?'Tim (seluruh peserta)':'Team (all participants)';
+      else if(/\b(?:kami|we)\b/i.test(low)&&!/\b(?:saya|aku|i will|i'll)\b/i.test(low))pic=firstName(s.who)+(I18?' (tim)':' (team)');
+      else pic=s.who;
+    }
     var tg=s.time?cap(s.time[0]):(/\b(segera|asap|urgent)\b/i.test(low)?(I18?'Segera':'ASAP'):(I18?'Perlu ditetapkan':'To be confirmed'));
-    var a=s.text.replace(/^(?:saya|aku|gue|kami|kita|tim(?: [a-z]+)?|i|we)\s+(?:juga\s+)?(?:akan|mau|bakal|coba|perlu|harus|will|need to|should|must|'ll)\s+/i,'').replace(/^(?:tolong|mohon|harap|segera|please|pastikan)\s+/i,'').replace(/^(?:tim [a-z]+)\s+(?=(?:update|cek|siapkan|buat|kirim|evaluasi|review|susun|perbarui|laporkan))/i,'');
-    a=rewrite(a,al,'plain');
-    model.actions.push({action:cap(condense(a,170)),pic:pic,target:tg});
+    var a=s.text.replace(/^(?:saya|aku|gue|kami|kita|tim(?: [a-z]+)?|i|we)\s+(?:juga\s+)?(?:akan|mau|bakal|coba|perlu|harus|will|need to|should|must|'ll)\s+/i,'').replace(/^(?:tolong|mohon|harap|segera|please|pastikan)\s+/i,'');
+    a=rewriteTxt(a,al,firstName(s.who),false);
+    model.actions.push({action:cap(endClean(condense(a,170))),pic:pic,target:tg});
   });
-  model.actions=model.actions.slice(0,8);
-  /* topik: judul dari frasa kunci, isi sebagai kalimat informasi */
-  var usedTitles={};
-  cl.forEach(function(c){
-    var members=c.idx.map(function(i){return S[i];}).filter(function(s){return !used[s.i];});
-    var title='',bestB=0,txt=' '+c.idx.map(function(i){return S[i].ws.join(' ');}).join(' ')+' ';
-    bigr.slice(0,10).forEach(function(b){var n=txt.split(' '+bg[b].s+' ').length-1;if(n>bestB&&!usedTitles[b]){bestB=n;title=bg[b].s;usedTitles[b]=1;}});
-    if(!title){var tk={};c.idx.forEach(function(i){S[i].key.forEach(function(k){if(topw[k])tk[k]=(tk[k]||0)+1;});});
-      var ks=Object.keys(tk).sort(function(a,b){return tk[b]*topw[b]-tk[a]*topw[a];}).slice(0,2).map(function(k){return surface(k);});title=listJoin(ks,I18?'dan':'and');}
-    if(!title)title=I18?'Pembahasan Umum':'General Discussion';
-    var n=Math.min(3,Math.max(1,Math.ceil(c.idx.length/3)));
-    var sel=members.filter(function(s){return !s.q;}).map(function(s){return {s:s,v:score(s)};}).sort(function(a,b){return b.v-a.v;}).slice(0,n).map(function(x){return x.s;}).sort(function(a,b){return a.i-b.i;});
-    if(sel.length)model.topics.push({title:titleCase(title),points:sel.map(function(s){return phrase(s,'gen',ctx);})});
+  model.actions=model.actions.slice(0,6);
+  /* ---- 8) topik: judul + butir deskriptif ---- */
+  var topicsRaw=segs.map(function(idx,gi){
+    var lab=labelFor(idx);
+    var cands=idx.map(function(i){return S[i];}).filter(function(s){return !used[s.i];});
+    var lead=cands.filter(function(s){return !s.q&&s.qual>=0.35;}).sort(function(a,b){return b.sc-a.sc;})[0]||cands.sort(function(a,b){return b.sc-a.sc;})[0]||null;
+    return {gi:gi,idx:idx,title:lab.text,lead:lead,cands:cands};
   });
-  if(!model.topics.length){var all=S.filter(function(s){return !s.q;}).slice(0,4);
-    if(all.length)model.topics.push({title:I18?'Pembahasan Umum':'General Discussion',points:all.map(function(s){return phrase(s,'gen',ctx);})});}
-  /* judul & ringkasan (prosa, bukan kutipan) */
-  var tnames=bigr.slice(0,2).map(function(b){return titleCase(bg[b].s);});
-  if(!tnames.length)tnames=cand.slice(0,2).map(function(c){return titleCase(surface(c.k));});
-  model.keywords=tnames;
-  model.subject=tnames.length?((I18?'Pembahasan ':'Discussion on ')+listJoin(tnames,I18?'dan':'and')):(I18?'Meeting':'Meeting');
-  var topicList=listJoin(model.topics.slice(0,3).map(function(t){return lc(t.title);}),I18?'dan':'and'),nP=plist.length;
-  var nm=listJoin(plist.slice(0,6).map(function(p){return cap(p.name);}),I18?'dan':'and'),room=opt.room||'',dur=(opt.duration&&opt.duration!=='00:00:00')?opt.duration:'';
+  var nTop=topicsRaw.length;
+  if(opt.debug)model._dbg=segs.map(function(idx,gi){return {label:topicsRaw[gi].title,sent:idx.map(function(i){return S[i].text.slice(0,70);})};});
+  topicsRaw.forEach(function(tp){
+    var pool=tp.cands.filter(function(s){return !s.q&&s.qual>=0.3&&!s.intro;});
+    if(!pool.length)pool=tp.cands.filter(function(s){return !s.q&&s.qual>=0.3;});
+    var want=Math.max(1,Math.min(5,Math.ceil(tp.idx.length*0.6)));
+    var chosen=uniq(pool.sort(function(a,b){return b.sc-a.sc;}),want+2).slice(0,want);
+    if(chosen.length<Math.min(2,tp.idx.length)){
+      var extra=tp.idx.map(function(i){return S[i];}).filter(function(s){return chosen.indexOf(s)<0&&!s.q&&s.qual>=0.3&&!s.intro&&!s.act&&!/\b(?:please|tolong|mohon)\b/i.test(s.text);}).sort(function(a,b){return b.sc-a.sc;});
+      chosen=chosen.concat(extra.slice(0,Math.min(2,tp.idx.length)-chosen.length));
+    }
+    chosen.sort(function(a,b){return a.i-b.i;});
+    var lastWho='',pts=[];
+    chosen.forEach(function(s){var t=fmtGen(s,'gen',210,lastWho===s.who);lastWho=s.who;if(t)pts.push(t);});
+    if(pts.length)model.topics.push({title:tp.title,points:pts});
+  });
+  if(!model.topics.length){
+    var all=S.filter(function(s){return !s.q;}).slice(0,5).map(function(s){return fmtGen(s,'gen',210);}).filter(Boolean);
+    if(all.length)model.topics.push({title:I18?'Pembahasan Umum':'General Discussion',points:all});
+  }
+  /* ---- 9) judul, ringkasan eksekutif berparagraf, kesimpulan ---- */
+  var labels=model.topics.map(function(t){return t.title;});
+  model.keywords=labels.slice(0,3);
+  var subjL=labels.slice(0,3).map(function(l){return l.split(' & ')[0];}).filter(function(v,i,a){return a.indexOf(v)===i;});
+  model.subject=subjL.length?((I18?'Pembahasan ':'Discussion on ')+listJoin(subjL,I18?'dan':'and')):(I18?'Meeting':'Meeting');
+  var nP=plist.length,room=opt.room||'',dur=(opt.duration&&opt.duration!=='00:00:00')?opt.duration:'';
+  var nm=listJoin(plist.slice(0,6).map(function(p){return cap(p.name);}),I18?'dan':'and'),Kt=labels.length,lbl=listJoin(labels.slice(0,6),I18?'dan':'and');
   var sm=[];
   if(I18){
-    sm.push((multi?('Meeting'+(room?' di '+room:'')+' dihadiri '+nP+' peserta ('+nm+')'):('Sesi'+(room?' di '+room:'')+' disampaikan oleh '+nm))+(dur?(multi?' dan berlangsung selama ':' selama ')+dur:'')+(topicList?', dengan pembahasan seputar '+topicList:'')+'.');
-    if(model.issues.length)sm.push('Hal yang disoroti: '+issPlain.slice(0,2).map(function(x){return lowerFirst(x.replace(/[.]$/,''));}).join('; ')+'.');
-    if(model.decisions.length)sm.push(model.decisions[0]);
-    sm.push(model.actions.length?('Terdapat '+model.actions.length+' tindak lanjut yang perlu dipantau.'):'Belum ada tindak lanjut yang disebutkan secara eksplisit.');
+    sm.push((multi?('Rapat'+(room?' di '+room:'')+' dihadiri '+nP+' peserta ('+nm+')'+(dur?' dan berlangsung selama '+dur:'')+'.'):(nm+' menyampaikan sesi'+(room?' di '+room:'')+(dur?' selama '+dur:'')+'.'))+
+      ' Tercatat '+model.items+' ucapan yang membahas '+(Kt>1?Kt+' topik utama: '+lbl:'topik '+lbl)+'.');
   }else{
-    sm.push((multi?('The meeting'+(room?' in '+room:'')+' was attended by '+nP+' participants ('+nm+')'):('The session'+(room?' in '+room:'')+' was delivered by '+nm))+(dur?(multi?' and lasted ':' and lasted ')+dur:'')+(topicList?', covering '+topicList:'')+'.');
-    if(model.issues.length)sm.push('Points highlighted: '+issPlain.slice(0,2).map(function(x){return lowerFirst(x.replace(/[.]$/,''));}).join('; ')+'.');
-    if(model.decisions.length)sm.push(model.decisions[0]);
-    sm.push(model.actions.length?('There are '+model.actions.length+' follow-up actions to be monitored.'):'No follow-up actions were explicitly mentioned.');
+    sm.push((multi?('The meeting'+(room?' in '+room:'')+' was attended by '+nP+' participants ('+nm+')'+(dur?' and lasted '+dur:'')+'.'):('The session'+(room?' in '+room:'')+' was delivered by '+nm+(dur?' and lasted '+dur:'')+'.'))+
+      ' A total of '+model.items+' statements were recorded, covering '+(Kt>1?Kt+' main topics: '+lbl:'the topic of '+lbl)+'.');
   }
+  var purpose=S.filter(function(s){return s.intro&&!s.q&&s.qual>=0.35;})[0];
+  if(purpose){var pb=body(purpose,170);if(pb)sm[0]+=' '+(I18?'Tujuan yang disampaikan: ':'Stated purpose: ')+lowerFirst(pb)+'.';}
+  var leadIdx={};
+  var ORD=I18?['Pertama,','Kemudian,','Selanjutnya,','Setelah itu,','Berikutnya,']:['First,','Then,','Next,','After that,','Afterwards,'];
+  var flow=[];
+  topicsRaw.forEach(function(tp){
+    var cand=tp.cands.filter(function(s){return !s.q&&!s.sub&&!s.intro&&s.qual>=0.35;}).sort(function(a,b){return b.sc-a.sc;})[0]||tp.lead;
+    if(!cand)return;
+    var b=body(cand,150);if(!b)return;
+    leadIdx[cand.i]=1;tp.flowS=cand;
+    flow.push({b:b,t:tp.title});
+  });
+  if(flow.length>=2||(flow.length===1&&N>=6)){
+    var MID=I18?['Kemudian beralih ke','Selanjutnya membahas','Setelah itu membahas','Berikutnya membahas']:['It then moved on to','The discussion continued with','Next came','It then turned to'];
+    var fl=flow.map(function(f,i){
+      if(flow.length===1)return (I18?'Inti pembahasan: ':'Main point: ')+lowerFirst(f.b)+'.';
+      var pre=i===0?(I18?'Pembahasan dimulai dari':'It began with'):(i===flow.length-1?(I18?'Pembahasan ditutup dengan':'It closed with'):MID[(i-1)%MID.length]);
+      return pre+' '+f.t+': '+lowerFirst(f.b)+'.';
+    });
+    sm.push(fl.join(' '));
+  }
+  var p3=[];
+  if(issPlain.length)p3.push((I18?'Hal yang menjadi perhatian: ':'Points of concern raised: ')+issPlain.slice(0,2).map(function(x){return lowerFirst(x.replace(/[.]$/,''));}).join('; ')+'.');
+  if(model.decisions.length)p3.push(model.decisions[0]);
+  p3.push(model.actions.length?(I18?('Teridentifikasi '+model.actions.length+' tindak lanjut (lihat tabel Action Item).'):('There '+(model.actions.length===1?'is 1 follow-up action':'are '+model.actions.length+' follow-up actions')+' (see the Action Items table).')):(I18?'Tidak ada tindak lanjut atau penanggung jawab yang disebutkan secara eksplisit.':'No follow-up actions or owners were stated explicitly.'));
+  sm.push(p3.join(' '));
   model.summary=sm;
-  var main=model.topics.length?lc(model.topics[0].title):topicList,cc=[];
-  if(I18){
-    cc.push('Pembahasan berfokus pada '+(main||'topik yang dibahas')+'.');
-    if(model.decisions.length)cc.push(model.decisions[0]);
-    cc.push(model.actions.length?'Seluruh tindak lanjut di atas perlu dipantau pada pertemuan berikutnya.':'Disarankan menetapkan penanggung jawab dan target tindak lanjut pada pertemuan berikutnya.');
-  }else{
-    cc.push('The discussion focused on '+(main||'the topics covered')+'.');
-    if(model.decisions.length)cc.push(model.decisions[0]);
-    cc.push(model.actions.length?'All follow-up actions above should be monitored at the next meeting.':'It is recommended to assign owners and targets for follow-up at the next meeting.');
-  }
+  var lastTp=topicsRaw[topicsRaw.length-1],take=null;
+  if(lastTp)take=lastTp.cands.filter(function(s){return !leadIdx[s.i]&&!s.q&&!s.sub&&!s.intro&&s.qual>=0.4;}).sort(function(a,b){return b.sc-a.sc;})[0]||null;
+  var cc=[];
+  cc.push(I18?('Pembahasan berfokus pada '+lbl+'.'):('The '+(multi?'meeting':'session')+' focused on '+lbl+'.'));
+  if(take){var tb=body(take,170);if(tb)cc.push((I18?'Poin penting: ':'Key takeaway: ')+lowerFirst(tb)+'.');}
+  if(model.decisions.length)cc.push(model.decisions[0]);
+  cc.push(model.actions.length?(I18?'Seluruh tindak lanjut di atas perlu dipantau pada pertemuan berikutnya.':'All follow-up actions above should be monitored at the next meeting.'):(I18?'Belum ada penanggung jawab atau target yang ditetapkan; bila diperlukan tindak lanjut, sebaiknya ditentukan pada pertemuan berikutnya.':'No owner or deadline was assigned; if any follow-up is needed, it should be defined at the next meeting.'));
   model.conclusion=cc.join(' ');
   return model;
 }
+/* kerangka tanpa analisis (dipakai bila ringkasan dibuat oleh AI Gemini) */
+function skeleton(items,opt){
+  var pmap={},plist=[];
+  items.forEach(function(it){var nm=String(it.name||'Peserta').trim()||'Peserta',k=lc(nm);if(!pmap[k]){pmap[k]={name:nm,n:0,langs:{}};plist.push(pmap[k]);}pmap[k].n++;if(it.srcLang)pmap[k].langs[String(it.srcLang).toUpperCase()]=1;});
+  return {al:(opt&&opt.lang==='id')?'id':'en',N:items.length,items:items.length,multi:plist.length>1,
+    participants:plist.map(function(p){return {name:cap(p.name),n:p.n,langs:Object.keys(p.langs).join(', ')};}),
+    subject:'',summary:[],topics:[],issues:[],decisions:[],actions:[],questions:[],conclusion:'',keywords:[]};
+}
+
 /* string yang diterjemahkan mesin saat bahasa notulen bukan id/en */
 function collect(model){
   var out=[];
@@ -3659,7 +3954,7 @@ function docx(model,L,meta,kind,rowsT,opts){
   var drels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
   return zip([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:doc},{name:'word/styles.xml',data:styles},{name:'word/_rels/document.xml.rels',data:drels}]);
 }
-return {analyze:analyze,collect:collect,html:html,text:text,printDoc:printDoc,docx:function(m,L,meta,opts){return docx(m,L,meta,'minutes',null,opts);},
+return {analyze:analyze,skeleton:skeleton,collect:collect,html:html,text:text,printDoc:printDoc,docx:function(m,L,meta,opts){return docx(m,L,meta,'minutes',null,opts);},
   transcriptDocx:function(rows,L,meta){return docx(null,L,meta,'transcript',rows);},labels:labels,pivotFor:pivotFor,isRtl:isRtl,LOC:LOC};
 })();
 var SC_COL={asakai:'#f59e0b',judge:'#5b5ef4',repair:'#ef4444',warehouse:'#10b981',delivery:'#8b5cf6',supplier:'#0ea5e9',suppmeet:'#0d9488',client:'#2563eb',customer:'#db2777',mgmt:'#7c3aed',officer:'#ca8a04',kaizen:'#f97316',meeting:'#ec4899',intro:'#16a34a',review:'#14b8a6',free:'#06b6d4'};
@@ -4226,12 +4521,12 @@ function gemModels(){
   [cfg.geminiModel,saved,'gemini-2.5-flash','gemini-2.0-flash','gemini-flash-latest','gemini-1.5-flash'].forEach(function(x){x=String(x||'').trim();if(x&&m.indexOf(x)<0)m.push(x);});
   return m;
 }
-function gemCall(model,system,userText){
+function gemCall(model,system,userText,ms,temp){
   var cfg=mainCfg();
   var url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
-  var body={contents:[{role:'user',parts:[{text:userText}]}],generationConfig:{responseMimeType:'application/json',temperature:0.7}};
+  var body={contents:[{role:'user',parts:[{text:userText}]}],generationConfig:{responseMimeType:'application/json',temperature:(temp==null?0.7:temp)}};
   if(system)body.systemInstruction={parts:[{text:system}]};
-  return fetchT(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.geminiKey},body:JSON.stringify(body)},30000)
+  return fetchT(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.geminiKey},body:JSON.stringify(body)},ms||30000)
   .then(function(r){
     if(r.ok)return r.json();
     return r.text().then(function(t){
@@ -4249,13 +4544,13 @@ function gemCall(model,system,userText){
     return j;
   });
 }
-function gem(system,userText){
+function gem(system,userText,ms,temp){
   if(!hasKey())return Promise.reject(gemErr('nokey','nokey'));
   var models=gemModels(),i=0;
   function next(){
     if(i>=models.length)return Promise.reject(gemErr('model','Tidak ada model Gemini yang tersedia.'));
     var m=models[i++];
-    return gemCall(m,system,userText).then(function(j){
+    return gemCall(m,system,userText,ms,temp).then(function(j){
       AI.ok=true;AI.model=m;AI.code='';try{localStorage.setItem(GEMKEY,m);}catch(e){}return j;
     },function(e){
       if(e.code==='model')return next();
@@ -4993,7 +5288,7 @@ function vNotes(){
     '<button type="button" class="la-b cyan" data-lrn="ntgen">'+ic('refresh',16)+' '+esc(T('ntGen'))+'</button></div>'+
     '<div class="nt-st" id="ntSt" role="status"></div></section>'+
     '<div class="nt-paper" id="ntPrev"></div>'+
-    '<p class="nt-foot" dir="auto">'+ic('shield',14)+' '+esc(T('ntLocal'))+' '+esc(T('ntAuto3'))+'</p>'+guideNotes()+'</div>';
+    '<p class="nt-foot" dir="auto">'+ic('shield',14)+' '+esc(T(ntAIon()?'ntAIfoot':'ntLocal'))+' '+esc(T('ntAuto3'))+'</p>'+guideNotes()+'</div>';
 }
 function guideNotes(){
   return '<section class="la-card la-guide"><div class="la-ch"><h3>'+ic('info',18)+' '+esc(T('ntT'))+'</h3></div><div class="la-steps">'+
@@ -5007,7 +5302,9 @@ function ntPaint(state){
   el.innerHTML=VBNotes.html(N.model,N.mL,N.meta,ntOpts());
   var msg='',kind='';
   if(info&&info.running){msg=T('ntLive');kind='wn';}
+  else if(N.meta&&N.meta.aiFail){msg='\u26A0\uFE0F '+T('ntAIfail')+' '+N.meta.aiFail;kind='wn';}
   else if(N.meta&&N.meta.mtFail){msg=T('ntNoTrans');kind='wn';}
+  else if(N.meta&&N.meta.ai){msg='\u2705 '+T('ntAIdone')+(N.meta.aiModel?' ('+N.meta.aiModel+')':'')+(N.meta.aiCut?' \u2014 '+T('ntAIcut'):'');kind='ok';}
   else{msg='\u2705 '+T('ntDone');kind='ok';}
   ntSetSt(msg,kind);
 }
@@ -5035,33 +5332,88 @@ function nBuild(hist,info,L,onProg){
     var h=it._h;
     return tr(h.text,piv,baseL(h.srcLang)||'auto').then(function(t){it.text=t||h.translated||h.text;},function(){it.text=h.translated||h.text;mtFail=true;});
   },'a').then(function(){
-    var model=VBNotes.analyze(items.map(function(it){return {name:it.name,srcLang:it.srcLang,ts:it.ts,text:it.text};}),{lang:piv,room:info.label,duration:info.dur});
+    var model=VBNotes.analyze(items.map(function(it){return {name:it.name,srcLang:it.srcLang,ts:it.ts,text:it.text};}),{lang:piv,room:info.label,duration:nDur(hist,info)});
     if(L===piv||L==='id'||L==='en'||!model.N)return model;
     var strs=VBNotes.collect(model);
     return pool(strs,function(s){
       return tr(s.o[s.k],L,piv).then(function(t){if(t)s.o[s.k]=t;},function(){mtFail=true;});
     },'b').then(function(){return model;});
   }).then(function(model){
-    return {model:model,meta:{room:info.label,code:info.code,ts:Date.now(),duration:info.dur,mtFail:mtFail}};
+    return {model:model,meta:{room:info.label,code:info.code,ts:Date.now(),duration:nDur(hist,info),mtFail:mtFail}};
+  });
+}
+var NV=3;   /* versi mesin notulen: cache hasil mesin lama otomatis diabaikan */
+function ntAI(){if(N.ai==null){try{N.ai=localStorage.getItem('vb_nt_ai')==='1';}catch(e){N.ai=false;}}return !!N.ai;}
+function ntAIon(){return ntAI()&&hasKey();}
+/* durasi: pakai timer sesi; bila 00:00:00 (mis. buka dari perangkat lain) hitung dari kalimat pertama sampai terakhir */
+function nDur(hist,info){
+  var d=info&&info.dur;
+  if(d&&d!=='00:00:00')return d;
+  var a=(hist||[]).map(function(h){return Number(h.ts)||0;}).filter(Boolean);
+  if(a.length>1){var r=Math.max.apply(null,a)-Math.min.apply(null,a);if(r>=1000)return hms(r);}
+  return d||'';
+}
+function aiFailText(e){var c=e&&e.code;if(c==='parse')return T('ntAIparse');var m=(c==='nokey')?T('gNoKey'):gemMsg(c);return String(m).replace(/\s*[^.]*(?:local coach|pelatih lokal)[^.]*\.\s*$/i,'');}
+/* notulen ditulis Gemini (opsional, hanya bila dicentang & ada API key). Bahasa asli transkrip dikirim, hasil langsung dalam bahasa notulen. */
+function nBuildAI(hist,info,L,onProg){
+  var LN=L1EN[L]||'English',tbc=(L==='id')?'Perlu ditetapkan':'To be confirmed';
+  var lines=hist.map(function(h){return '['+(h.time||'--')+'] '+(h.name||'Participant')+' ('+String(h.srcLang||'?').toUpperCase()+'): '+String(h.text||'').replace(/\s+/g,' ').trim();});
+  var tx=lines.join('\n'),cut=false;
+  if(tx.length>110000){tx=tx.slice(0,110000);cut=true;}
+  var names={};hist.forEach(function(h){names[h.name||'Participant']=1;});
+  var sys='You are a professional meeting secretary. Write the minutes of meeting (MoM) in '+LN+' from a speech-recognition transcript. The transcript can be noisy, can mix several languages, and can contain repeated rehearsal takes of the same sentence.\n'+
+   'Rules:\n'+
+   '1. Be faithful. Use only information that is in the transcript. Never invent names, numbers, dates, decisions or action items. When unsure, leave it out.\n'+
+   '2. Ignore greetings, microphone checks (e.g. "can you hear me"), closings, filler words and repeated takes.\n'+
+   '3. Be descriptive and specific. The executive summary has exactly 3 short paragraphs: (a) context and purpose; (b) what was discussed, in order, with concrete facts, figures and names; (c) outcomes, risks and next steps.\n'+
+   '4. Group the content into 3 to 7 logical topics. Each topic has a clear noun-phrase title (max 6 words) and 2 to 5 complete-sentence points written in the third person, naming the speaker where it matters.\n'+
+   '5. "issues" = real problems or risks that were stated. "decisions" = only what was explicitly agreed or decided. "actions" = only explicit commitments or assignments (task, owner, deadline). Never turn advice to an audience, suggestions or plans to talk about something into actions. For a presentation or podcast with no assignments, "actions" is an empty array.\n'+
+   '6. "questions" = only genuinely unanswered questions between participants. Rhetorical questions to an audience are not open questions.\n'+
+   '7. If an owner or deadline is not stated write "'+tbc+'" for the target and the speaker name for the owner.\n'+
+   'Write every text value in '+LN+'. Return ONLY one JSON object with exactly these keys: {"subject":string,"summary":[string,string,string],"topics":[{"title":string,"points":[string]}],"issues":[string],"decisions":[string],"actions":[{"action":string,"pic":string,"target":string}],"questions":[string],"conclusion":string}';
+  var usr='Room: '+info.label+'\nDate: '+new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+'\nDuration: '+(nDur(hist,info)||'-')+'\nParticipants: '+Object.keys(names).join(', ')+'\n\nTRANSCRIPT:\n'+tx;
+  if(onProg)onProg('ai',0,1);
+  return gem(sys,usr,120000,0.3).then(function(j){
+    function clip(v,n){return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,n);}
+    function arrS(a,n,m){return (Array.isArray(a)?a:[]).map(function(x){return clip(typeof x==='string'?x:(x&&(x.text||x.point||x.action))||'',m);}).filter(Boolean).slice(0,n);}
+    var model=VBNotes.skeleton(hist.map(function(h){return {name:h.name,srcLang:h.srcLang};}),{lang:L==='id'?'id':'en'});
+    model.subject=clip(j.subject,170);
+    model.summary=arrS(j.summary,5,1100);
+    model.topics=(Array.isArray(j.topics)?j.topics:[]).slice(0,8).map(function(t){return {title:clip(t&&t.title,100),points:arrS(t&&t.points,6,460)};}).filter(function(t){return t.title&&t.points.length;});
+    model.issues=arrS(j.issues,6,380);model.decisions=arrS(j.decisions,6,380);model.questions=arrS(j.questions,6,380);
+    model.actions=(Array.isArray(j.actions)?j.actions:[]).slice(0,12).map(function(x){return {action:clip(x&&x.action,280),pic:clip(x&&x.pic,70)||'-',target:clip(x&&x.target,70)||tbc};}).filter(function(x){return x.action;});
+    model.conclusion=clip(j.conclusion,800);
+    model.keywords=model.topics.slice(0,3).map(function(t){return t.title;});
+    if(!model.summary.length||!model.topics.length)throw gemErr('parse','incomplete');
+    if(!model.subject)model.subject=model.topics.slice(0,3).map(function(t){return t.title;}).join(', ');
+    return {model:model,meta:{room:info.label,code:info.code,ts:Date.now(),duration:nDur(hist,info),ai:true,aiModel:AI.model,aiCut:cut}};
   });
 }
 function ntEnsure(force){
   var api=nApi();if(!api||!api.inRoom()||N.busy)return Promise.resolve();
-  var info=api.info(),hist=api.history(),L=N.L||nLangDefault(info),key=nKey(info),c=nCache()[key];
-  if(!force&&c&&c.L===L&&c.n===hist.length&&Date.now()-c.t<HOLD_MS&&!info.running){N.model=c.model;N.meta=c.meta;N.mL=L;ntPaint();return Promise.resolve();}
+  var info=api.info(),hist=api.history(),L=N.L||nLangDefault(info),key=nKey(info),c=nCache()[key],useAI=ntAIon();
+  if(!force&&c&&c.v===NV&&c.ai===useAI&&c.L===L&&c.n===hist.length&&Date.now()-c.t<HOLD_MS&&!info.running){N.model=c.model;N.meta=c.meta;N.mL=L;ntPaint();return Promise.resolve();}
   if(!hist.length){N.model=null;ntPaint('empty');return Promise.resolve();}
-  N.busy=true;var my=++N.gen;ntSetSt(T('ntBuilding'),'wk');
-  return nBuild(hist,info,L,function(label,done,total){if(my===N.gen)ntSetSt((label==='b'?T('ntTranslating'):T('ntBuilding'))+' '+done+'/'+total,'wk');}).then(function(r){
+  N.busy=true;var my=++N.gen;ntSetSt(T(useAI?'ntAIbusy':'ntBuilding'),'wk');
+  function prog(label,done,total){if(my===N.gen&&label!=='ai')ntSetSt((label==='b'?T('ntTranslating'):T('ntBuilding'))+' '+done+'/'+total,'wk');}
+  var job=useAI?nBuildAI(hist,info,L,prog).catch(function(e){
+    ntSetSt(T('ntBuilding'),'wk');
+    return nBuild(hist,info,L,prog).then(function(r){r.meta.aiFail=aiFailText(e);return r;});
+  }):nBuild(hist,info,L,prog);
+  return job.then(function(r){
     N.busy=false;if(my!==N.gen)return;
     N.model=r.model;N.meta=r.meta;N.mL=L;
-    var cc=nCache();cc[key]={t:Date.now(),L:L,n:hist.length,model:r.model,meta:r.meta};jset(NOTEKEY,cc);
+    var cc=nCache();cc[key]={t:Date.now(),v:NV,ai:useAI,L:L,n:hist.length,model:r.model,meta:r.meta};jset(NOTEKEY,cc);
     ntPaint();
   },function(e){N.busy=false;ntSetSt('\u26A0\uFE0F '+(e&&e.message||e),'bad');});
 }
 function ntWT(){if(N.wt==null){try{N.wt=localStorage.getItem('vb_nt_wt')==='1';}catch(e){N.wt=false;}}return !!N.wt;}
 function ntRows(){var api=nApi();if(!api||!api.inRoom())return [];return api.history().map(function(h){return {time:h.time||'',name:h.name||'',orig:h.text||''};});}
 function ntOpts(){var on=ntWT();return {withTranscript:on,rows:on?ntRows():[]};}
-function ntOptHtml(){return '<label class="nt-chk"><input type="checkbox" id="ntWT"'+(ntWT()?' checked':'')+'><span dir="auto">'+esc(T('ntAttach'))+'</span></label>';}
+function ntOptHtml(){
+  var ai=hasKey()?'<label class="nt-chk"><input type="checkbox" id="ntAI"'+(ntAI()?' checked':'')+'><span dir="auto">'+esc(T('ntAI'))+'<small>'+esc(T('ntAIsub'))+'</small></span></label>':'<div class="nt-ainote" dir="auto">'+esc(T('ntAINoKey'))+'</div>';
+  return ai+'<label class="nt-chk"><input type="checkbox" id="ntWT"'+(ntWT()?' checked':'')+'><span dir="auto">'+esc(T('ntAttach'))+'</span></label>';
+}
 function ntTick(){
   var e=$('ntCd');if(!e)return;
   var api=nApi();if(!api||!api.inRoom())return;
@@ -5099,7 +5451,7 @@ function ntTrDocx(){
   var info=api.info(),hist=api.history(),L=N.L||nLangDefault(info);
   if(!hist.length){toast('\u26A0\uFE0F '+esc(T('ntEmpty')),'warn',5000);return;}
   var rows=hist.map(function(h){return {time:h.time||'',name:h.name||'',orig:h.text||'',trans:h.translated||'-'};});
-  dlBytes(ntName('Transcript',info,L,'docx'),VBNotes.transcriptDocx(rows,L,{room:info.label,code:info.code,ts:Date.now(),duration:info.dur}),DOCX_MIME);
+  dlBytes(ntName('Transcript',info,L,'docx'),VBNotes.transcriptDocx(rows,L,{room:info.label,code:info.code,ts:Date.now(),duration:nDur(hist,info)}),DOCX_MIME);
   toast('\u2705 '+esc(T('ntDl')),'ok',3500);
 }
 function ntCopy(){ntWithModel(function(){copyText(VBNotes.text(N.model,N.mL,N.meta,ntOpts()),T('ntCopied'));});}
@@ -5403,6 +5755,21 @@ function turn4(text){
     addCoach(h,r.verdict);
     var wtxt=r.why||(r.whyEn?(L1()==='id'?r.whyId:r.whyEn):'');
     if(wtxt){S.t4.mist.push(wtxt);U.mist.push({t:Date.now(),s:sc.id,w:String(wtxt).slice(0,200)});}
+    /* PATCH index 28: tahap bebas adalah proses belajar, bukan sekadar chat.
+       Jawaban ngawur / terlalu lemah tidak boleh langsung menaikkan giliran. */
+    var normBetter=nb(r.better||''), normUser=nb(text);
+    var mustRetry=(score<65||r.verdict==='bad'||r.verdict==='retry'||(normBetter&&normBetter!==normUser&&score<75));
+    if(mustRetry){
+      S.busy=false;
+      var repeatText=(r.better&&String(r.better).trim())||'Please answer again with a clear and relevant sentence.';
+      var repeatL1=(L1()==='id')
+        ?'Jawaban belum tepat. Dengarkan kalimat perbaikannya, lalu ucapkan ulang. Giliran berikutnya baru terbuka setelah jawaban membaik. Anda tetap dapat menekan Lewati secara manual.'
+        :'Your answer needs correction. Listen to the improved sentence and repeat it before continuing. You can still use Skip manually.';
+      addAI(repeatText,{auto:true,l1:repeatL1});
+      addNote('\uD83D\uDCA1 '+repeatL1);
+      updAiPill();renderPanel();
+      return;
+    }
     S.results.push({score:score,txt:text});recItem(score);
     S.busy=false;S.idx++;setProg();
     if(r.reply){if(!last)S.t4.hist.push({r:'AI',t:r.reply});addAI(r.reply,{auto:true,l1:r.reply_l1});}
@@ -5693,6 +6060,7 @@ document.addEventListener('input',function(e){
 });
 document.addEventListener('change',function(e){
   var id=e.target&&e.target.id;
+  if(id==='ntAI'){N.ai=!!e.target.checked;try{localStorage.setItem('vb_nt_ai',N.ai?'1':'0');}catch(_e){}N.model=null;ntEnsure(true);return;}
   if(id==='ntWT'){N.wt=!!e.target.checked;try{localStorage.setItem('vb_nt_wt',N.wt?'1':'0');}catch(_e){}ntPaint();return;}
   if(id==='ntL'){N.L=e.target.value;N.model=null;ntEnsure(false);return;}
   if(id&&id.indexOf('laL1')===0){
