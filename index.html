@@ -1195,19 +1195,37 @@ var sentenceBuf='', sentenceTimer=null;
 var SENTENCE_PAUSE_MS=1600;
 var SENTENCE_MAX_CHARS=260;
 var ENDING=/[.!?。！？؟…]\s*$/;
+/* PATCH index 30 — Mode Audio Pemutaran (podcast/video): pembicara sering jeda di tengah frasa,
+   sehingga mesin suara menghasilkan potongan seperti "...studi saya di". Di mode ini buffer menunggu lebih lama,
+   TIDAK dikirim selama masih ada suara (interim) yang sedang masuk, dan baru dikirim bila sudah jeda
+   panjang / kalimat selesai / buffer terlalu lama. Mode Mic Langsung memakai nilai lama (tidak berubah). */
+var sentenceStartAt=0;
+var PB_PAUSE_MS=2800, PB_MAX_CHARS=420, PB_MAX_AGE_MS=14000;
+function playbackMode(){ return audioSourceMode==='playback'; }
+function pauseMs(){ return playbackMode()?PB_PAUSE_MS:SENTENCE_PAUSE_MS; }
+function maxChars(){ return playbackMode()?PB_MAX_CHARS:SENTENCE_MAX_CHARS; }
 function bufferSpeech(text){
+  if(!sentenceBuf) sentenceStartAt=Date.now();
   sentenceBuf = (sentenceBuf?sentenceBuf+' ':'') + text;
   liveDraft.textContent='✍️ '+sentenceBuf+' …';
   clearTimeout(sentenceTimer);
-  if(ENDING.test(sentenceBuf) || sentenceBuf.length>=SENTENCE_MAX_CHARS){ flushSentence(); return; }
-  sentenceTimer=setTimeout(flushSentence,SENTENCE_PAUSE_MS);
+  var tooOld=playbackMode()&&(Date.now()-sentenceStartAt)>PB_MAX_AGE_MS;
+  if(ENDING.test(sentenceBuf) || sentenceBuf.length>=maxChars() || tooOld){ flushSentence(); return; }
+  sentenceTimer=setTimeout(flushSentence,pauseMs());
+}
+/* dipanggil saat masih ada suara interim: tahan pengiriman selama pembicara belum berhenti */
+function holdBufferWhileSpeaking(){
+  if(!playbackMode()||!sentenceBuf) return;
+  if((Date.now()-sentenceStartAt)>PB_MAX_AGE_MS){ flushSentence(); return; }
+  clearTimeout(sentenceTimer);
+  sentenceTimer=setTimeout(flushSentence,pauseMs());
 }
 function flushSentence(){
   clearTimeout(sentenceTimer); sentenceTimer=null;
   var text=String(sentenceBuf||'').replace(/\s+/g,' ').trim();
   sentenceBuf=''; liveDraft.textContent='';
   if(!text||!currentRoomId) return;
-  if(isRecentDup(recentRecognition,normKey(text),RECOG_DEDUPE_MS)) return;
+  if(isRecentDup(recentRecognition,normKey(text),playbackMode()?3000:RECOG_DEDUPE_MS)) return;
   var now=new Date();
   Backend.pushMessage(currentRoomId,{
     id:'msg-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
@@ -1342,6 +1360,7 @@ function checkVoiceAvailability(){
   }
 }
 var onlineAudioEl=null, audioOn=true, audioPrimed=false, currentUtterance=null;
+var curTtsRate=1;   /* PATCH index 30: kecepatan suara terjemahan (1 = normal); naik otomatis saat antrean menumpuk di mode Audio Pemutaran */
 /* Buka kunci audio (autoplay policy Chrome mobile): speechSynthesis & <audio> baru boleh bersuara
    setelah ada interaksi pengguna. Dipanggil dari tombol/klik, lalu suara terjemahan bisa
    diputar otomatis kapan pun datang. */
@@ -1405,6 +1424,7 @@ function playOnlineTTS(text,lang,onDone,onFail){
       if(u>=urls.length){ if(first) fail(); else done(); return; }
       var audio=new Audio(urls[u++]), tried=false;
       function next(){ if(tried) return; tried=true; tryUrl(); }
+      try{ audio.defaultPlaybackRate=curTtsRate; audio.playbackRate=curTtsRate; }catch(e){}
       onlineAudioEl=audio;
       audio.onended=playNext;
       audio.onerror=next;   /* endpoint gagal -> coba endpoint cadangan; semua gagal -> fallback voice lokal */
@@ -1441,6 +1461,18 @@ function resumeEngineAfterTTS(){
 function processTTS(){
   if(ttsBusy||!ttsQueue.length) return;
   var item=ttsQueue.shift(); ttsBusy=true;
+  /* PATCH index 30 — Mode Audio Pemutaran: kalimat yang menumpuk digabung jadi satu bacaan (lebih mulus, tanpa jeda
+     antar-kalimat) dan dibacakan sedikit lebih cepat selama masih ada antrean, supaya terjemahan mengejar podcast
+     dan tidak ada kalimat yang terlewat. Mode Mic Langsung tetap kecepatan normal. */
+  curTtsRate=1;
+  if(playbackMode()){
+    while(ttsQueue.length && ttsQueue[0].lang===item.lang && (item.text.length+ttsQueue[0].text.length)<=300){
+      var nx=ttsQueue.shift();
+      item={text:item.text+' '+nx.text,lang:item.lang,messageId:item.messageId};
+    }
+    var backlog=ttsQueue.length;
+    curTtsRate=backlog>=4?1.4:backlog>=2?1.25:backlog>=1?1.12:1;
+  }
   var ended=false, guardT=null, startT=null;
   function fin(){
     if(ended) return; ended=true; clearTimeout(guardT); clearTimeout(startT);
@@ -1466,7 +1498,7 @@ function processTTS(){
   function speakLocal(onFail){
     var u=new SpeechSynthesisUtterance(item.text), started=false, failed=false;
     currentUtterance=u;   /* simpan referensi agar tidak di-garbage-collect sebelum selesai */
-    u.voice=v; u.lang=v.lang; u.rate=1.0; u.pitch=1.0; u.volume=1.0;
+    u.voice=v; u.lang=v.lang; u.rate=curTtsRate; u.pitch=1.0; u.volume=1.0;
     function fail(){ if(failed||ended) return; failed=true; try{window.speechSynthesis.cancel();}catch(e){} onFail(); }
     u.onstart=function(){ started=true; clearTimeout(startT); };
     u.onend=function(){ if(!failed) fin(); };
@@ -1490,7 +1522,8 @@ function enqueueSpeech(text,lang,msgId){
   if(!text) return;
   if(!('speechSynthesis' in window)&&!onlineTTSEnabled()) return;
   for(var i=0;i<ttsQueue.length;i++) if(ttsQueue[i].messageId===msgId) return;
-  if(ttsQueue.length>=3) ttsQueue.shift();
+  /* PATCH index 30: mode Audio Pemutaran menampung sampai 15 kalimat (sebelumnya 3 → kalimat lama dibuang → suara tidak utuh) */
+  if(ttsQueue.length>=(playbackMode()?15:3)) ttsQueue.shift();
   ttsQueue.push({text:String(text),lang:lang,messageId:msgId});
   processTTS();
 }
@@ -1648,8 +1681,8 @@ function handleIncoming(d){
     renderMsg(id,d.date,d.time,d.original,translated,src,tgt,mine,false,speakerName);
     var ts=Number(d.timestamp||0);
     var key=tgt+'|'+normKey(translated);
-    var dup=isRecentDup(recentSpeech,key,SPEECH_DEDUPE_MS)||key===lastSpokenKey;
-    if(audioOn && currentRoomId && ts>=joinAt && (Date.now()-ts)<SPEECH_FRESH_MS && !dup && !isSameLanguage(src,tgt) && normKey(translated)){
+    var dup=isRecentDup(recentSpeech,key,playbackMode()?4000:SPEECH_DEDUPE_MS)||(key===lastSpokenKey&&!playbackMode());
+    if(audioOn && currentRoomId && ts>=joinAt && (Date.now()-ts)<(playbackMode()?120000:SPEECH_FRESH_MS) && !dup && !isSameLanguage(src,tgt) && normKey(translated)){
       lastSpokenKey=key; enqueueSpeech(translated,tgt,id);
     }
   }).catch(function(){
@@ -1824,7 +1857,7 @@ function startEngine(){
           if(!text) continue;
           if(r.isFinal){ lastInterimText=''; bufferSpeech(text); } else interim=text;
         }
-        if(interim){ lastInterimText=interim; }
+        if(interim){ lastInterimText=interim; holdBufferWhileSpeaking(); }
         if(isMobile) pulseLevel();
         if(interim && !sentenceBuf) liveDraft.textContent='✍️ '+interim+' …';
       };
@@ -1849,7 +1882,7 @@ function startEngine(){
       recognition.onend=function(){
         if(genId!==recognitionGeneration||isMuted||!isRunning||leavingRoom) return;
         /* Android sering memotong sesi sebelum hasil FINAL keluar → jangan buang kalimat yang sudah terdengar */
-        if(isAndroid && lastInterimText){ bufferSpeech(lastInterimText); lastInterimText=''; }
+        if((isAndroid||playbackMode()) && lastInterimText){ bufferSpeech(lastInterimText); lastInterimText=''; }
         flushSentence();
         if(!resultSeenThisInstance){
           consecutiveEmptyRestarts++;
@@ -1991,7 +2024,7 @@ function openSettings(){
   '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)">'+
   '<div class="badge-soft" style="margin-bottom:8px">\uD83E\uDD16 Pelatih Bahasa Inggris (opsional)</div>'+
   'Menu <b>Belajar</b> sudah memakai <b>pelatih AI lokal</b> (tanpa API key &amp; tanpa internet). Jika Anda punya key Gemini, tempel di sini agar percakapan dibantu Google Gemini; bila gagal, pelatih lokal otomatis melanjutkan.<br>'+
-  '<span style="color:var(--muted);font-size:11px">Key gratis di <b>aistudio.google.com/apikey</b>. Permintaan dikirim langsung dari browser Anda ke Google. Notulen rapat hanya memakai key ini bila Anda mencentang <b>Gunakan Gemini AI</b> di menu Notulen (teks transkrip dikirim ke Google).</span><br>'+
+  '<span style="color:var(--muted);font-size:11px">Key gratis di <b>aistudio.google.com/apikey</b>. Permintaan dikirim langsung dari browser Anda ke Google. Notulen rapat <b>otomatis memakai key ini</b> (teks transkrip dikirim ke Google). Untuk rapat rahasia, hapus centang <b>Gemini AI</b> di menu Notulen.</span><br>'+
   '<label class="fld" style="margin-top:8px">Gemini API Key</label><input class="txt" id="cfgGeminiKey" placeholder="AIza... / AQ...">'+
   '<label class="fld" style="margin-top:8px">Model (opsional)</label><input class="txt" id="cfgGeminiModel" placeholder="otomatis (gemini-2.5-flash / gemini-2.0-flash)">'+
   '</div>'+
@@ -2137,7 +2170,7 @@ audioSourceSel.addEventListener('change',function(){
   audioSourceMode=audioSourceSel.value;
   var isPlayback=audioSourceMode==='playback';
   toast(isPlayback
-    ? '🔊 <b>Mode Audio Pemutaran aktif.</b> Penyaring gema/noise dimatikan agar audio speaker (podcast/video) tertangkap utuh &amp; tidak terputus-putus.'
+    ? '🔊 <b>Mode Audio Pemutaran aktif.</b> Penyaring gema/noise dimatikan agar audio speaker (podcast/video) tertangkap utuh &amp; tidak terputus-putus. Transkrip kini menunggu pembicara selesai berbicara sebelum dikirim. \uD83C\uDFA7 \u003Cb\u003EPakai headset\u003C/b\u003E untuk suara terjemahan agar tidak tertangkap ulang oleh mikrofon.'
     : '🎤 <b>Mode Mic Langsung aktif.</b> Penyaring gema/noise dinyalakan kembali untuk suara manusia di ruangan.',
     'ok',8000);
   /* PENTING: gunakan applyConstraints() pada track yang SUDAH terbuka, BUKAN
@@ -2394,7 +2427,7 @@ var UI_EN={
  ntLocal:'Made on your device by the local AI engine. No API or internet is needed for the analysis.',ntNoTrans:'Automatic translation is not available now. Showing the base language.',
  ntEmpty:'No conversation yet. Start a session and speak first.',ntDone:'Minutes are ready.',ntCopied:'Minutes copied.',ntDl:'File downloaded.',ntOnlyRoom:'Minutes are only shown for the room you are in.',
  ntStats:'sentences',ntAttach:'Attach the original transcript below the minutes',ntPeople:'participants',
- ntAI:'Use Gemini AI for deeper, more descriptive minutes',ntAIsub:'Optional. Sends the transcript text to Google Gemini using your API key. If it fails, the local engine is used automatically.',ntAINoKey:'Tip: add a Gemini API key in Settings to unlock more descriptive AI-written minutes (optional).',ntAIbusy:'Gemini AI is writing the minutes...',ntAIdone:'Minutes written by Gemini AI.',ntAIfail:'Gemini could not be used, so the local engine was used instead:',ntAIparse:'The AI answer was incomplete.',ntAIcut:'The transcript was very long, so only the first part was summarised.',ntAIfoot:'These minutes were written by Gemini AI from the transcript text, using your API key. Please review before sharing.',
+ ntAI:'Gemini AI writes the minutes automatically (deeper & more descriptive)',ntAIsub:'On by default when a Gemini API key is saved. The transcript text is sent to Google Gemini with your API key. Untick to keep everything on this device. If Gemini fails, the local engine is used automatically.',ntAINoKey:'Tip: add a Gemini API key in Settings to unlock more descriptive AI-written minutes (optional).',ntAIbusy:'Gemini AI is writing the minutes...',ntAIdone:'Minutes written by Gemini AI.',ntAIfail:'Gemini could not be used, so the local engine was used instead:',ntAIparse:'The AI answer was incomplete.',ntAIcut:'The transcript was very long, so only the first part was summarised.',ntAIfoot:'These minutes were written by Gemini AI from the transcript text, using your API key. Please review before sharing.',
  guide:'How to use this app',g1:'Open Meeting Room, pick a room and enter your name.',g2:'Open Translator, tap Start, then Unmute to speak.',g3:'Open Learn to practice English, then check Progress.',tourAgain:'Watch the tutorial',
  aTitleIn:'Welcome back',aSubIn:'Log in to see your score, AI tips and progress.',
  aTitleUp:'Create your account',aSubUp:'Your scores and AI tips are saved to your account.',
@@ -2487,7 +2520,7 @@ var UI_ID={
  ntLocal:'Dibuat di perangkat Anda oleh mesin AI lokal. Analisis tidak memerlukan API maupun internet.',ntNoTrans:'Terjemahan otomatis sedang tidak tersedia. Ditampilkan dalam bahasa dasar.',
  ntEmpty:'Belum ada percakapan. Mulai sesi dan bicara dulu.',ntDone:'Notulen siap.',ntCopied:'Notulen disalin.',ntDl:'File terunduh.',ntOnlyRoom:'Notulen hanya tampil untuk room yang sedang Anda masuki.',
  ntStats:'kalimat',ntAttach:'Lampirkan transkrip asli di bawah notulen',ntPeople:'peserta',
- ntAI:'Gunakan Gemini AI untuk notulen lebih mendalam & deskriptif',ntAIsub:'Opsional. Teks transkrip dikirim ke Google Gemini memakai API key Anda. Jika gagal, mesin lokal otomatis dipakai.',ntAINoKey:'Tips: isi Gemini API Key di Pengaturan untuk notulen yang ditulis AI dan lebih deskriptif (opsional).',ntAIbusy:'Gemini AI sedang menulis notulen...',ntAIdone:'Notulen ditulis oleh Gemini AI.',ntAIfail:'Gemini tidak dapat dipakai, jadi mesin lokal yang digunakan:',ntAIparse:'Jawaban AI tidak lengkap.',ntAIcut:'Transkrip sangat panjang, hanya bagian awal yang diringkas.',ntAIfoot:'Notulen ini ditulis oleh Gemini AI dari teks transkrip memakai API key Anda. Mohon diperiksa kembali sebelum dibagikan.',
+ ntAI:'Gemini AI menulis notulen otomatis (lebih mendalam & deskriptif)',ntAIsub:'Aktif otomatis bila Gemini API Key tersimpan. Teks transkrip dikirim ke Google Gemini memakai key Anda. Hapus centang agar semuanya tetap di perangkat ini. Jika Gemini gagal, mesin lokal otomatis dipakai.',ntAINoKey:'Tips: isi Gemini API Key di Pengaturan untuk notulen yang ditulis AI dan lebih deskriptif (opsional).',ntAIbusy:'Gemini AI sedang menulis notulen...',ntAIdone:'Notulen ditulis oleh Gemini AI.',ntAIfail:'Gemini tidak dapat dipakai, jadi mesin lokal yang digunakan:',ntAIparse:'Jawaban AI tidak lengkap.',ntAIcut:'Transkrip sangat panjang, hanya bagian awal yang diringkas.',ntAIfoot:'Notulen ini ditulis oleh Gemini AI dari teks transkrip memakai API key Anda. Mohon diperiksa kembali sebelum dibagikan.',
  guide:'Cara memakai aplikasi ini',g1:'Buka Room Meeting, pilih room, lalu isi nama Anda.',g2:'Buka Translator, tekan Start, lalu Unmute untuk bicara.',g3:'Buka Belajar untuk latihan Inggris, lalu cek Progress.',tourAgain:'Lihat tutorial',
  aTitleIn:'Selamat datang kembali',aSubIn:'Masuk untuk melihat skor, saran AI, dan perkembangan Anda.',
  aTitleUp:'Buat akun Anda',aSubUp:'Skor dan saran AI tersimpan di akun Anda.',
@@ -5343,7 +5376,8 @@ function nBuild(hist,info,L,onProg){
   });
 }
 var NV=3;   /* versi mesin notulen: cache hasil mesin lama otomatis diabaikan */
-function ntAI(){if(N.ai==null){try{N.ai=localStorage.getItem('vb_nt_ai')==='1';}catch(e){N.ai=false;}}return !!N.ai;}
+/* PATCH index 30: Gemini AI AKTIF OTOMATIS bila API key tersimpan. Hanya mati bila pengguna sendiri menghapus centang di menu Notulen. */
+function ntAI(){if(N.ai==null){try{N.ai=(localStorage.getItem('vb_nt_ai')!=='0');}catch(e){N.ai=true;}}return !!N.ai;}
 function ntAIon(){return ntAI()&&hasKey();}
 /* durasi: pakai timer sesi; bila 00:00:00 (mis. buka dari perangkat lain) hitung dari kalimat pertama sampai terakhir */
 function nDur(hist,info){
@@ -5391,7 +5425,7 @@ function nBuildAI(hist,info,L,onProg){
 }
 function ntEnsure(force){
   var api=nApi();if(!api||!api.inRoom()||N.busy)return Promise.resolve();
-  var info=api.info(),hist=api.history(),L=N.L||nLangDefault(info),key=nKey(info),c=nCache()[key],useAI=ntAIon();
+  var info=api.info(),hist=api.history(),L=N.L||nLangDefault(info),key=nKey(info),c=nCache()[key],useAI=ntAIon()&&(force||!info.running);
   if(!force&&c&&c.v===NV&&c.ai===useAI&&c.L===L&&c.n===hist.length&&Date.now()-c.t<HOLD_MS&&!info.running){N.model=c.model;N.meta=c.meta;N.mL=L;ntPaint();return Promise.resolve();}
   if(!hist.length){N.model=null;ntPaint('empty');return Promise.resolve();}
   N.busy=true;var my=++N.gen;ntSetSt(T(useAI?'ntAIbusy':'ntBuilding'),'wk');
@@ -5422,7 +5456,17 @@ function ntTick(){
 function notesAfterRender(){
   clearInterval(N.timer);N.timer=setInterval(ntTick,1000);
   var api=nApi();
-  if(api&&api.inRoom())ntEnsure(false);
+  if(api&&api.inRoom()){
+    if(N.busy){ntSetSt(T(ntAIon()?'ntAIbusy':'ntBuilding'),'wk');if(N.model)ntPaint();}
+    else ntEnsure(false);
+  }
+}
+/* PATCH index 30: begitu sesi dihentikan, notulen langsung dibuat otomatis di latar belakang (Gemini bila aktif),
+   sehingga sudah siap saat menu Notulen dibuka. */
+function ntAutoAfterStop(tries){
+  var api=nApi();if(!api||!api.inRoom())return;
+  if(N.busy){if(tries>0)setTimeout(function(){ntAutoAfterStop(tries-1);},3000);return;}
+  ntEnsure(true);
 }
 function dlBytes(name,bytes,mime){
   var blob=new Blob([bytes],{type:mime||'application/octet-stream'}),url=URL.createObjectURL(blob),a=document.createElement('a');
@@ -6097,7 +6141,7 @@ window.__vbOn=function(ev,d){
   try{
     if(ev==='openNotes'){go('notes');}
     else if(ev==='reset'||ev==='leave'){nPurge(d&&d.rid);N.model=null;N.gen++;N.busy=false;N.L=null;if(R.tab==='notes')renderView();}
-    else if(ev==='stop'){N.model=null;toast('\uD83D\uDCDD '+esc(T('nNotes'))+': '+esc(T('ntDone')),'ok',7000);if(R.tab==='notes')ntEnsure(true);}
+    else if(ev==='stop'){N.model=null;toast('\uD83D\uDCDD '+esc(T('nNotes'))+': '+esc(T(ntAIon()?'ntAIbusy':'ntDone')),'ok',7000);setTimeout(function(){ntAutoAfterStop(5);},2500);}
     else if(ev==='start'){N.model=null;}
     else if(ev==='cfg'){AI.ok=null;renderChrome();if(R.tab==='profile'||R.tab==='home')renderView();}
   }catch(err){}
